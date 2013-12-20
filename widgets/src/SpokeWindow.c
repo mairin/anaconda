@@ -121,7 +121,11 @@ static void anaconda_spoke_window_init(AnacondaSpokeWindow *win) {
     gtk_widget_set_vexpand(win->priv->button, FALSE);
     gtk_widget_set_valign(win->priv->button, GTK_ALIGN_END);
     gtk_widget_set_margin_bottom(win->priv->button, 6);
-
+    
+    /* Set 'Done' button to blue 'suggested-action' style class */
+    GtkStyleContext *context = gtk_widget_get_style_context(win->priv->button);
+    gtk_style_context_add_class(context, "suggested-action");
+    
     /* Hook up some signals for that button.  The signal handlers here will
      * just raise our own custom signals for the whole window.
      */
