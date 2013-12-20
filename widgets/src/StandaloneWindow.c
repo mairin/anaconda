@@ -70,8 +70,75 @@ static void anaconda_standalone_window_realize(GtkWidget *widget,
 
 G_DEFINE_TYPE(AnacondaStandaloneWindow, anaconda_standalone_window, ANACONDA_TYPE_BASE_WINDOW)
 
+static int get_sidebar_width(GtkWidget *window) {
+	GtkAllocation allocation;
+	/* change value below to make sidebar bigger / smaller */
+	float sidebar_width_percentage = .18;  
+	gtk_widget_get_allocation(window, &allocation);
+	return allocation.width * sidebar_width_percentage;
+}
+
+static int get_sidebar_height(GtkWidget *window) {
+	GtkAllocation allocation;
+	gtk_widget_get_allocation(window, &allocation);
+	return allocation.height;
+}
+
+/* function to override default drawing to insert sidebar image */
+gboolean anaconda_standalone_window_on_draw(GtkWidget *win, cairo_t *cr) {
+	
+	/* Create sidebar */
+	GTK_WIDGET_CLASS(anaconda_standalone_window_parent_class)->draw(win,cr);
+	cairo_rectangle(cr, 0, 0, get_sidebar_width(win), get_sidebar_height(win));
+	
+	/* Configure sidebar base color */
+	/* Dark grey for RHEL:  65/255.0, 65/255.0, 62/255.0, 1 */
+	/* Blue for Fedora:     60/255.0, 110/255.0, 180/255.0, 1 */
+    cairo_set_source_rgba(cr, 65/255.0, 65/255.0, 62/255.0, 1); 
+    cairo_fill_preserve(cr); 
+    
+	/* Configure sidebar texture image */
+	GdkPixbuf *pixbuf_background = gdk_pixbuf_new_from_file("/usr/share/anaconda/pixmaps/noise-texture.png", NULL); 
+	cairo_surface_t *surface= gdk_cairo_surface_create_from_pixbuf(pixbuf_background, 0, gtk_widget_get_window(GTK_WIDGET(win))); 
+	cairo_set_source_surface(cr, surface, 0, 0);
+	cairo_pattern_set_extend(cairo_get_source(cr), CAIRO_EXTEND_REPEAT);
+	cairo_fill(cr);
+ 	
+    /* Configure logo image overlaid on sidebar */
+    GdkPixbuf *pixbuf_logo = gdk_pixbuf_new_from_file("/usr/share/anaconda/pixmaps/redhat-logo.png", NULL); 
+	if (pixbuf_logo != NULL) {
+		double x_value = (get_sidebar_width(win) - gdk_pixbuf_get_width(pixbuf_logo))/2;
+		double y_value = 20;
+		cairo_surface_t *surface= gdk_cairo_surface_create_from_pixbuf(pixbuf_logo, 0, gtk_widget_get_window(GTK_WIDGET(win))); 
+		cairo_set_source_surface(cr, surface, x_value, y_value);
+		cairo_rectangle(cr, x_value, y_value, gdk_pixbuf_get_width(pixbuf_logo), gdk_pixbuf_get_height(pixbuf_logo));
+		cairo_fill(cr);
+	}
+    return TRUE; /* TRUE to avoid default draw handler */
+}
+
+/* Move base window content appropriate amount of space to the right to make room for sidebar */
+static void anaconda_standalone_window_size_allocate (GtkWidget *window, GtkAllocation *allocation) {
+	GtkAllocation child_allocation;
+	GtkWidget *child;
+	
+	gtk_widget_set_allocation(window, allocation);
+	int sidebar_width = get_sidebar_width(window);
+	child_allocation.x = allocation->x+sidebar_width;
+	child_allocation.y = allocation->y;
+	child_allocation.width = allocation->width-sidebar_width;
+	child_allocation.height = allocation->height;
+	
+	child = gtk_bin_get_child (GTK_BIN (window));
+	if (child && gtk_widget_get_visible (child))
+    gtk_widget_size_allocate (child, &child_allocation);
+}
+
 static void anaconda_standalone_window_class_init(AnacondaStandaloneWindowClass *klass) {
     GObjectClass *object_class = G_OBJECT_CLASS(klass);
+    GtkWidgetClass *widget_class = GTK_WIDGET_CLASS(klass);
+    widget_class->draw=anaconda_standalone_window_on_draw;
+    widget_class->size_allocate=anaconda_standalone_window_size_allocate;
 
     klass->quit_clicked = NULL;
     klass->continue_clicked = NULL;
