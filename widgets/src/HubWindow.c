@@ -126,6 +126,8 @@ gboolean anaconda_hub_window_on_draw(GtkWidget *win, cairo_t *cr) {
 		cairo_rectangle(cr, x_value, y_value, gdk_pixbuf_get_width(pixbuf_logo), gdk_pixbuf_get_height(pixbuf_logo));
 		cairo_fill(cr);
 	}
+	g_object_unref(pixbuf_background);
+	g_object_unref(pixbuf_logo);
     return TRUE; /* TRUE to avoid default draw handler */
 }
 
