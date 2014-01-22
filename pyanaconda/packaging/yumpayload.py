@@ -188,7 +188,7 @@ class YumPayload(PackagePayload):
         # This value comes from a default install of the x86_64 Fedora 18.  It
         # is meant as a best first guess only.  Once package metadata is
         # available we can use that as a better value.
-        self._space_required = Size(en_spec="3000 MB")
+        self._space_required = Size(spec="3000 MB")
 
         self._groups = None
         self._packages = []
@@ -467,7 +467,6 @@ reposdir=%s
         except RepoError:
             return super(YumPayload, self).isRepoEnabled(repo_id)
 
-    # pylint: disable-msg=W0221
     @refresh_base_repo()
     def updateBaseRepo(self, fallback=True, root=None, checkmount=True):
         """ Update the base repo based on self.data.method.
@@ -1388,29 +1387,6 @@ reposdir=%s
                     break
         else:
             rpm.addMacro("__file_context_path", "%{nil}")
-
-    def _transactionErrors(self, errors):
-        spaceNeeded = {}
-        retval = ""
-
-        # RPM can give us a bunch of potential errors, but we really only
-        # care about a handful.
-        for (descr, (ty, mount, need)) in errors:
-            log.error(descr)
-
-            if ty == rpm.RPMPROB_DISKSPACE:
-                spaceNeeded[mount] = need
-
-        # Now that we've found the ones we are interested in, create an
-        # error string to match.
-        if spaceNeeded:
-            retval += _("You need more space on the following "
-                        "file systems:\n")
-
-            for (mount, need) in spaceNeeded.items():
-                retval += "%s on %s\n" % (Size(need), mount)
-
-        return retval
 
     def install(self):
         """ Install the payload.

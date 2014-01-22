@@ -225,6 +225,11 @@ def parseOptions(argv=None, cmdline=None):
     # "option=0" on the boot commandline (store_true options do, though).
     # Basically, don't use store_false unless the option starts with "no".
 
+    # YET ANOTHER NOTE: If you change anything here:
+    # a) document its usage in docs/boot-options.txt
+    # b) be prepared to maintain it for a very long time
+    # If this seems like too much trouble, *don't add a new option*!
+
     # Interface
     op.add_option("-C", "--cmdline", dest="display_mode", action="store_const", const="c",
                   default="g")
@@ -817,12 +822,6 @@ if __name__ == "__main__":
     if opts.dlabel: #autodetected driverdisc in use
         flags.dlabel = True
 
-    if opts.noipv4:
-        flags.useIPv4 = False
-
-    if opts.noipv6:
-        flags.useIPv6 = False
-
     if opts.proxy:
         anaconda.proxy = opts.proxy
 
@@ -901,7 +900,7 @@ if __name__ == "__main__":
     # execute) that now.  Otherwise, load in defaults from kickstart files
     # shipped with the installation media.
     ksdata = None
-    if opts.ksfile:
+    if opts.ksfile and not opts.liveinst:
         flags.automatedInstall = True
         flags.eject = False
         ksFiles = [opts.ksfile]

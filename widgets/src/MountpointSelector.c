@@ -21,6 +21,7 @@
 #include <gdk/gdk.h>
 #include <glib.h>
 #include <glib/gstdio.h>
+#include <pango/pango.h>
 #include <gettext.h>
 
 #include "MountpointSelector.h"
@@ -167,15 +168,6 @@ static void format_name_label(AnacondaMountpointSelector *widget, const char *va
     g_free(markup);
 }
 
-/* XXX: this should be provided by the Gtk itself (#1008821) */
-static GtkTextDirection get_default_widget_direction() {
-    const char *xlated = g_dgettext("gtk30", "default:LTR");
-    if (strcmp (xlated, "default:RTL") == 0)
-        return GTK_TEXT_DIR_RTL;
-    else
-        return GTK_TEXT_DIR_LTR;
-}
-
 static void anaconda_mountpoint_selector_init(AnacondaMountpointSelector *mountpoint) {
     gchar *file;
 
@@ -202,10 +194,10 @@ static void anaconda_mountpoint_selector_init(AnacondaMountpointSelector *mountp
      * gtk_image_new_from_file will just display a broken image icon in that
      * case.  That's good enough error notification.
      */
-    if (get_default_widget_direction() == GTK_TEXT_DIR_LTR)
-        file = g_strdup_printf("%s/pixmaps/right-arrow-icon.png", get_widgets_datadir());
+    if (gtk_get_locale_direction() == GTK_TEXT_DIR_LTR)
+        file = g_strdup_printf("%s/pixmaps/right-arrow-icon.png", anaconda_get_widgets_datadir());
     else
-        file = g_strdup_printf("%s/pixmaps/left-arrow-icon.png", get_widgets_datadir());
+        file = g_strdup_printf("%s/pixmaps/left-arrow-icon.png", anaconda_get_widgets_datadir());
     mountpoint->priv->arrow = gtk_image_new_from_file(file);
     g_free(file);
     gtk_widget_set_no_show_all(GTK_WIDGET(mountpoint->priv->arrow), TRUE);
@@ -217,6 +209,8 @@ static void anaconda_mountpoint_selector_init(AnacondaMountpointSelector *mountp
     mountpoint->priv->name_label = gtk_label_new(NULL);
     format_name_label(mountpoint, _(DEFAULT_NAME));
     gtk_misc_set_alignment(GTK_MISC(mountpoint->priv->name_label), 0, 0);
+    gtk_label_set_ellipsize(GTK_LABEL(mountpoint->priv->name_label), PANGO_ELLIPSIZE_MIDDLE);
+    gtk_label_set_max_width_chars(GTK_LABEL(mountpoint->priv->name_label), 25);
     gtk_widget_set_hexpand(GTK_WIDGET(mountpoint->priv->name_label), TRUE);
 
     /* Create the size label. */

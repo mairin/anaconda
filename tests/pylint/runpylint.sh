@@ -47,16 +47,17 @@ export DISABLED_ERR_OPTIONS="--disable=E1103"
 # W0142 - Used * or ** magic
 # W0511 - Used when a warning note as FIXME or XXX is detected.
 # W0603 - Using the global statement
-# W0604 - Using the global statement at the module level
 # W0613 - Unused argument %r
 # W0614 - Unused import %s from wildcard import
-export DISABLED_WARN_OPTIONS="--disable=W0110,W0141,W0142,W0511,W0603,W0604,W0613,W0614"
+export DISABLED_WARN_OPTIONS="--disable=W0110,W0141,W0142,W0511,W0603,W0613,W0614"
 
 usage () {
   echo "usage: `basename $0` [--strict] [--help] [files...]"
   exit $1
 }
 
+# Separate the module parameters from the files list
+ARGS=
 FILES=
 while [ $# -gt 0 ]; do
   case $1 in
@@ -66,18 +67,15 @@ while [ $# -gt 0 ]; do
     --help)
       usage 0
       ;;
+    -*)
+      ARGS="$ARGS $1"
+      ;;
     *)
       FILES=$@
       break
   esac
   shift
 done
-
-if [ "`tail -c 1 $FALSE_POSITIVES`" == "`echo`" ]; then
-  echo "Error $FALSE_POSITIVES ends with an enter."
-  echo "Error the last line of $FALSE_POSITIVES should never have an enter!"
-  exit 1
-fi
 
 exit_status=0
 
@@ -95,7 +93,7 @@ fi
 
 num_cpus=$(getconf _NPROCESSORS_ONLN)
 # run pylint in paralel
-echo $FILES | xargs --max-procs=$num_cpus -n 1 "$srcdir"/pylint-one.sh || exit 1
+echo $FILES | xargs --max-procs=$num_cpus -n 1 "$srcdir"/pylint-one.sh $ARGS || exit 1
 
 for file in $(find -name 'pylint-out*'); do
     cat "$file" >> pylint-log

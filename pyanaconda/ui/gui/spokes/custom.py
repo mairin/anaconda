@@ -31,7 +31,7 @@
 
 from contextlib import contextmanager
 import re
-import unicodedata
+import locale
 
 from pykickstart.constants import CLEARPART_TYPE_NONE, AUTOPART_TYPE_PLAIN, AUTOPART_TYPE_BTRFS, AUTOPART_TYPE_LVM, AUTOPART_TYPE_LVM_THINP
 
@@ -63,7 +63,7 @@ from blivet.partitioning import doAutoPartition
 from blivet.errors import StorageError
 from blivet.errors import NoDisksError
 from blivet.errors import NotEnoughFreeSpaceError
-from blivet.errors import SizeParamsError, SizeNotPositiveError
+from blivet.errors import SizeParamsError
 from blivet.devicelibs import mdraid
 from blivet.devices import LUKSDevice
 
@@ -76,10 +76,9 @@ from pyanaconda.ui.gui.spokes.lib.passphrase import PassphraseDialog
 from pyanaconda.ui.gui.spokes.lib.accordion import selectorFromDevice, Accordion, Page, CreateNewPage, UnknownPage
 from pyanaconda.ui.gui.spokes.lib.refresh import RefreshDialog
 from pyanaconda.ui.gui.spokes.lib.summary import ActionSummaryDialog
-from pyanaconda.ui.gui.utils import setViewportBackground, gtk_action_wait, enlightbox, fancy_set_sensitive, ignoreEscape,\
-        really_hide, really_show
+from pyanaconda.ui.gui.utils import setViewportBackground, enlightbox, fancy_set_sensitive, ignoreEscape
+from pyanaconda.ui.gui.utils import really_hide, really_show, fire_gtk_action
 from pyanaconda.ui.gui.categories.system import SystemCategory
-from pyanaconda.ui.lib.disks import size_str
 
 from gi.repository import Gdk, Gtk
 from gi.repository.AnacondaWidgets import MountpointSelector
@@ -108,6 +107,10 @@ unrecoverable_error_msg = N_("Storage configuration reset due to unrecoverable "
 device_configuration_error_msg = N_("Device reconfiguration failed. Click for "
                                     "details.")
 
+label_format_invalid_msg = N_("Unacceptable label format for filesystem.")
+label_application_unavailable_msg = N_("Can not set label on filesystem.")
+label_resetting_forbidden_msg = N_("Can not relabel already existing filesystem.")
+
 empty_mountpoint_msg = N_("Please enter a valid mountpoint.")
 invalid_mountpoint_msg = N_("That mount point is invalid. Try something else?")
 mountpoint_in_use_msg = N_("That mount point is already in use. Try something else?")
@@ -120,6 +123,18 @@ empty_name_msg = N_("Please enter a valid name.")
 container_type_names = {DEVICE_TYPE_LVM: lvm_container_name,
                         DEVICE_TYPE_LVM_THINP: lvm_container_name,
                         DEVICE_TYPE_BTRFS: btrfs_container_name}
+
+LABEL_OK = 0
+LABEL_FORMAT_INVALID = 1
+LABEL_APPLICATION_UNAVAILABLE = 2
+LABEL_RESETTING_FORBIDDEN = 3
+
+label_validation_msgs = {
+    LABEL_OK: "",
+    LABEL_FORMAT_INVALID: label_format_invalid_msg,
+    LABEL_APPLICATION_UNAVAILABLE: label_application_unavailable_msg,
+    LABEL_RESETTING_FORBIDDEN: label_resetting_forbidden_msg}
+
 
 MOUNTPOINT_OK = 0
 MOUNTPOINT_INVALID = 1
@@ -150,19 +165,23 @@ partition_only_format_types = ["efi", "macefi", "prepboot", "biosboot",
 def size_from_entry(entry):
     size_text = entry.get_text().decode("utf-8").strip()
 
+    # Nothing to parse
+    if not size_text:
+        return None
+
+    # if no unit was specified, default to MiB. Assume that a string
+    # ending with anything other than a digit has a unit suffix
+    if re.search(r'[\d.%s]$' % locale.nl_langinfo(locale.RADIXCHAR), size_text):
+        size_text += "MiB"
+
     try:
-        # if no unit was specified, default to MB. Assume that a string
-        # ending with any kind of a letter has a unit suffix.
-        if size_text and unicodedata.category(size_text[-1]).startswith("L"):
-            size = Size(spec=size_text)
-        else:
-            size = Size(en_spec="%sMB" % size_text)
-    except (SizeParamsError, SizeNotPositiveError, ValueError):
+        size = Size(spec=size_text)
+    except (SizeParamsError, ValueError):
         return None
     else:
-        # Minimium size for ui-created partitions is 1MB.
-        if size.convertTo(en_spec="mb") < 1:
-            size = Size(en_spec="1mb")
+        # Minimium size for ui-created partitions is 1MiB.
+        if size.convertTo(spec="MiB") < 1:
+            size = Size(spec="1 MiB")
 
     return size
 
@@ -196,6 +215,28 @@ def populate_mountpoint_store(store, used_mountpoints):
     for path in paths:
         if path not in used_mountpoints:
             store.append([path])
+
+def validate_label(label, fmt):
+    """Returns a code indicating either that the given label can be set for
+       this filesystem or the reason why it can not.
+
+       In the case where the format can not assign a label, the empty string
+       stands for accept the default, but in the case where the format can
+       assign a label the empty string represents itself.
+
+       :param str label: The label
+       :param DeviceFormat fmt: The device format to label
+
+    """
+    if label == "" and not fmt.labeling():
+        return LABEL_OK
+    if fmt.exists:
+        return LABEL_RESETTING_FORBIDDEN
+    if not fmt.labeling():
+        return LABEL_APPLICATION_UNAVAILABLE
+    if not fmt.labelFormatOK(label):
+        return LABEL_FORMAT_INVALID
+    return LABEL_OK
 
 def validate_mountpoint(mountpoint, used_mountpoints, strict=True):
     if strict:
@@ -358,7 +399,7 @@ class DisksDialog(GUIObject):
         # populate the store
         for disk in self._disks:
             self._store.append([disk.description,
-                                str(Size(en_spec="%dMB" % disk.size)),
+                                str(disk.size),
                                 str(free[disk.name][0]),
                                 disk.serial,
                                 disk.id])
@@ -420,7 +461,7 @@ class ContainerDialog(GUIObject):
         self.exists = kwargs.pop("exists", False)
 
         self.size_policy = kwargs.pop("size_policy", SIZE_POLICY_AUTO)
-        self.size = kwargs.pop("size", 0)
+        self.size = kwargs.pop("size", Size(bytes=0))
 
         self._error = None
         GUIObject.__init__(self, *args, **kwargs)
@@ -444,7 +485,7 @@ class ContainerDialog(GUIObject):
         # populate the store
         for disk in self._disks:
             self._store.append([disk.description,
-                                str(Size(en_spec="%dMB" % disk.size)),
+                                str(disk.size),
                                 str(free[disk.name][0]),
                                 disk.serial,
                                 disk.id])
@@ -470,8 +511,7 @@ class ContainerDialog(GUIObject):
         self._raidStoreFilter.refilter()
         self._populate_raid()
 
-        size = Size(en_spec="%d mb" % self.size)
-        self._sizeEntry.set_text(size.humanReadable(max_places=None))
+        self._sizeEntry.set_text(self.size.humanReadable(max_places=None))
         if self.size_policy == SIZE_POLICY_AUTO:
             self._sizeCombo.set_active(0)
         elif self.size_policy == SIZE_POLICY_MAX:
@@ -545,9 +585,7 @@ class ContainerDialog(GUIObject):
             size = SIZE_POLICY_MAX
         elif idx == 2:
             size = size_from_entry(self._sizeEntry)
-            if size:
-                size = int(size.convertTo(en_spec="MB"))
-            elif size is None:
+            if size is None:
                 size = SIZE_POLICY_MAX
 
         # now save the changes
@@ -785,10 +823,6 @@ class CustomPartitioningSpoke(NormalSpoke, StorageChecker):
         threadMgr.add(AnacondaThread(name=THREAD_CUSTOM_STORAGE_INIT, target=self._initialize))
 
     def _initialize(self):
-        @gtk_action_wait
-        def gtk_action(name):
-            self._fsCombo.append_text(name)
-
         self._fs_types = []
         for cls in device_formats.itervalues():
             obj = cls()
@@ -800,7 +834,7 @@ class CustomPartitioningSpoke(NormalSpoke, StorageChecker):
                             (isinstance(obj, FS) or
                              obj.type in ["biosboot", "prepboot", "swap"]))
             if supported_fs:
-                gtk_action(obj.name)
+                fire_gtk_action(self._fsCombo.append_text, obj.name)
                 self._fs_types.append(obj.name)
 
     @property
@@ -843,12 +877,9 @@ class CustomPartitioningSpoke(NormalSpoke, StorageChecker):
 
     def _currentTotalSpace(self):
         """Add up the sizes of all selected disks and return it as a Size."""
-        totalSpace = 0
-
-        for disk in self._clearpartDevices:
-            totalSpace += disk.size
-
-        return Size(en_spec="%f MB" % totalSpace)
+        totalSpace = sum((disk.size for disk in self._clearpartDevices),
+                         Size(bytes=0))
+        return totalSpace
 
     def _updateSpaceDisplay(self):
         # Set up the free space/available space displays in the bottom left.
@@ -864,6 +895,7 @@ class CustomPartitioningSpoke(NormalSpoke, StorageChecker):
                 count) % count
 
         self._summaryLabel.set_text(summary)
+        self._summaryLabel.set_use_underline(True)
 
     def _reset_storage(self):
         self.__storage = self.storage.copy()
@@ -1161,10 +1193,8 @@ class CustomPartitioningSpoke(NormalSpoke, StorageChecker):
         # SIZE
         old_size = device.size
         size = size_from_entry(self._sizeEntry)
-        if size:
-            size = int(size.convertTo(en_spec="MB"))
         changed_size = ((use_dev.resizable or not use_dev.exists) and
-                        size != int(old_size))
+                        size != old_size)
         log.debug("old size: %s", old_size)
         log.debug("new size: %s", size)
 
@@ -1183,10 +1213,11 @@ class CustomPartitioningSpoke(NormalSpoke, StorageChecker):
         old_fs_type = device.format.type
         fs_type_index = self._fsCombo.get_active()
         fs_type = self._fsCombo.get_model()[fs_type_index][0]
-        fs_type_short = getFormat(fs_type).type
-        changed_fs_type = (old_fs_type != fs_type_short)
+        new_fs = getFormat(fs_type)
+        new_fs_type = new_fs.type
+        changed_fs_type = (old_fs_type != new_fs_type)
         log.debug("old fs type: %s", old_fs_type)
-        log.debug("new fs type: %s", fs_type_short)
+        log.debug("new fs type: %s", new_fs_type)
 
         # ENCRYPTION
         old_encrypted = isinstance(device, LUKSDevice)
@@ -1196,14 +1227,19 @@ class CustomPartitioningSpoke(NormalSpoke, StorageChecker):
         log.debug("new encryption setting: %s", encrypted)
 
         # FS LABEL
-        label = ""
-        if self._labelEntry.get_sensitive():
-            label = self._labelEntry.get_text()
-
-        old_label = getattr(device.format, "label", "") or ""
+        label = self._labelEntry.get_text()
+        old_label = getattr(device.format, "label", "")
         changed_label = (label != old_label)
         log.debug("old label: %s", old_label)
         log.debug("new_label: %s", label)
+        if changed_label or changed_fs_type:
+            error = validate_label(label, new_fs)
+            if error:
+                self._error = _(label_validation_msgs[error])
+                self.set_warning(self._error)
+                self.window.show_all()
+                self._populate_right_side(selector)
+                return
 
         # MOUNTPOINT
         mountpoint = None   # None means format type is not mountable
@@ -1251,12 +1287,12 @@ class CustomPartitioningSpoke(NormalSpoke, StorageChecker):
             error = (_("/boot/efi must be on a device of type %s")
                      % _(DEVICE_TEXT_PARTITION))
         elif device_type != DEVICE_TYPE_PARTITION and \
-             fs_type_short in partition_only_format_types:
+             new_fs_type in partition_only_format_types:
             error = (_("%(fs)s must be on a device of type %(type)s")
                        % {"fs" : fs_type, "type" : _(DEVICE_TEXT_PARTITION)})
         elif mountpoint and encrypted and mountpoint.startswith("/boot"):
             error = _("%s cannot be encrypted") % mountpoint
-        elif encrypted and fs_type_short in partition_only_format_types:
+        elif encrypted and new_fs_type in partition_only_format_types:
             error = _("%s cannot be encrypted") % fs_type
         elif mountpoint == "/" and device.format.exists and not reformat:
             error = _("You must create a new filesystem on the root device.")
@@ -1476,16 +1512,16 @@ class CustomPartitioningSpoke(NormalSpoke, StorageChecker):
             # And then we need to re-check that the max size is actually
             # different from the current size.
             _changed_size = False
-            if size != device.size and int(size) == int(device.currentSize):
+            if size != device.size and size == device.currentSize:
                 # size has been set back to its original value
                 actions = self.__storage.devicetree.findActions(type="resize",
                                                                 devid=device.id)
                 with ui_storage_logger():
-                    for action in actions:
+                    for action in reversed(actions):
                         self.__storage.devicetree.cancelAction(action)
                         _changed_size = True
             elif size != device.size:
-                log.debug("scheduling resize of device %s to %s MB", device.name, size)
+                log.debug("scheduling resize of device %s to %s", device.name, size)
 
                 with ui_storage_logger():
                     try:
@@ -1507,7 +1543,7 @@ class CustomPartitioningSpoke(NormalSpoke, StorageChecker):
                 # update the selector's size property
                 for s in self._accordion.allSelectors:
                     if s._device == device:
-                        s.size = size_str(device.size)
+                        s.size = str(device.size)
 
                 # update size props of all btrfs devices' selectors
                 self._update_selectors()
@@ -1554,7 +1590,7 @@ class CustomPartitioningSpoke(NormalSpoke, StorageChecker):
             #
             # FORMATTING
             #
-            log.info("scheduling reformat of %s as %s", device.name, fs_type_short)
+            log.info("scheduling reformat of %s as %s", device.name, new_fs_type)
             with ui_storage_logger():
                 old_format = device.format
                 new_format = getFormat(fs_type,
@@ -1723,20 +1759,15 @@ class CustomPartitioningSpoke(NormalSpoke, StorageChecker):
         self._mountPointEntry.set_text(getattr(device.format, "mountpoint", "") or "")
         fancy_set_sensitive(self._mountPointEntry, device.format.mountable)
 
-        self._labelEntry.set_text(getattr(device.format, "label", "") or "")
-        # We could label existing formats that have a labelFsProg if we added an
-        # ActionLabelFormat class.
-        can_label = (hasattr(device.format, "label") and
-                     not device.format.exists and
-                     device.format.type != "btrfs")
-        fancy_set_sensitive(self._labelEntry, can_label)
-
         if hasattr(device.format, "label"):
-            self._labelEntry.props.has_tooltip = False
+            if device.format.label is None:
+                device.format.label = ""
+            self._labelEntry.set_text(device.format.label)
         else:
-            self._labelEntry.set_tooltip_text(_("This file system does not support labels."))
+            self._labelEntry.set_text("")
+        fancy_set_sensitive(self._labelEntry, not device.format.exists)
 
-        self._sizeEntry.set_text(Size(en_spec="%d MB" % device.size).humanReadable(max_places=None))
+        self._sizeEntry.set_text(device.size.humanReadable(max_places=None))
 
         self._reformatCheckbox.set_active(not device.format.exists)
         fancy_set_sensitive(self._reformatCheckbox, not device.protected and
@@ -1938,29 +1969,30 @@ class CustomPartitioningSpoke(NormalSpoke, StorageChecker):
         self.__storage.devicetree.pruneActions()
         self.__storage.devicetree.sortActions()
 
-        dialog = ActionSummaryDialog(self.data)
-        with enlightbox(self.window, dialog.window):
-            dialog.refresh(self.__storage.devicetree.findActions())
-            rc = dialog.run()
-
-        if rc != 1:
-            # Cancel.  Stay on the custom screen.
-            return
-
-        # Then if they did anything that resulted in new LUKS devices, we need
-        # to prompt for passphrases.
-        new_luks = any(d for d in self.__storage.devices
-                       if d.format.type == "luks" and not d.format.exists)
-        if new_luks:
-            dialog = PassphraseDialog(self.data)
+        if len(self.__storage.devicetree.findActions()) > 0:
+            dialog = ActionSummaryDialog(self.data)
             with enlightbox(self.window, dialog.window):
+                dialog.refresh(self.__storage.devicetree.findActions())
                 rc = dialog.run()
 
             if rc != 1:
-                # Cancel. Leave the old passphrase set if there was one.
+                # Cancel.  Stay on the custom screen.
                 return
 
-            self.passphrase = dialog.passphrase
+            # Then if they did anything that resulted in new LUKS devices, we need
+            # to prompt for passphrases.
+            new_luks = any(d for d in self.__storage.devices
+                           if d.format.type == "luks" and not d.format.exists)
+            if new_luks:
+                dialog = PassphraseDialog(self.data)
+                with enlightbox(self.window, dialog.window):
+                    rc = dialog.run()
+
+                if rc != 1:
+                    # Cancel. Leave the old passphrase set if there was one.
+                    return
+
+                self.passphrase = dialog.passphrase
 
         NormalSpoke.on_back_clicked(self, button)
 
@@ -1984,7 +2016,7 @@ class CustomPartitioningSpoke(NormalSpoke, StorageChecker):
         log.debug("requested size = %s  ; available space = %s", dialog.size, self._free_space)
 
         # if no size was entered, request as much of the free space as possible
-        if dialog.size is not None and dialog.size.convertTo(en_spec="mb") < 1:
+        if dialog.size is not None and dialog.size.convertTo(spec="mb") < 1:
             size = None
         else:
             size = dialog.size
@@ -2027,9 +2059,6 @@ class CustomPartitioningSpoke(NormalSpoke, StorageChecker):
             encrypted = False
 
         disks = self._clearpartDevices
-        if size is not None:
-            size = float(size.convertTo(en_spec="mb"))
-
         self.clear_errors()
 
         with ui_storage_logger():
@@ -2377,7 +2406,7 @@ class CustomPartitioningSpoke(NormalSpoke, StorageChecker):
 
     def _container_store_row(self, name, freeSpace=None):
         if freeSpace is not None:
-            return [name, _("(%s free)") % size_str(freeSpace)]
+            return [name, _("(%s free)") % freeSpace]
         else:
             return [name, ""]
 
@@ -2606,9 +2635,10 @@ class CustomPartitioningSpoke(NormalSpoke, StorageChecker):
                 self.__storage.doAutoPart = False
                 log.debug("finished automatic partitioning")
 
-    def on_create_clicked(self, button):
+    def on_create_clicked(self, button, autopartTypeCombo):
         # Then do autopartitioning.  We do not do any clearpart first.  This is
         # custom partitioning, so you have to make your own room.
+        self.__storage.autoPartType = autopartTypeCombo.get_active()
         self._do_autopart()
 
         # Refresh the spoke to make the new partitions appear.
@@ -2643,16 +2673,6 @@ class CustomPartitioningSpoke(NormalSpoke, StorageChecker):
         self._encryptCheckbox.set_sensitive(device_type != DEVICE_TYPE_BTRFS)
         fancy_set_sensitive(self._fsCombo, active)
 
-        # The label entry can only be sensitive if reformat is active and the
-        # currently selected filesystem can be labeled.
-        label_active = active
-        if active:
-            fmt = getFormat(self._fsCombo.get_active_text())
-            label_active = (active and hasattr(fmt, "label") and
-                            fmt.type != "btrfs")
-
-        fancy_set_sensitive(self._labelEntry, label_active)
-
     def on_fs_type_changed(self, combo):
         if not self._initialized:
             return
@@ -2662,11 +2682,6 @@ class CustomPartitioningSpoke(NormalSpoke, StorageChecker):
             return
         log.debug("fs type changed: %s", new_type)
         fmt = getFormat(new_type)
-        # FIXME: can't set a label on an existing format as of now
-        label_active = (self._reformatCheckbox.get_active() and
-                        hasattr(fmt, "label") and
-                        fmt.type != "btrfs")
-        fancy_set_sensitive(self._labelEntry, label_active)
         fancy_set_sensitive(self._mountPointEntry, fmt.mountable)
 
     def _populate_container(self, device=None):

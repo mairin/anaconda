@@ -40,9 +40,15 @@ dist_check_SCRIPTS = glade/accelerators/check_accelerators.py \
 		     glade/accelerators/run_check_accelerators.sh \
 		     glade/pw_visibility/check_pw_visibility.py \
 		     glade/pw_visibility/run_check_pw_visibility.sh \
+		     glade/validity/check_glade_validity.py \
+		     glade/validity/run_check_glade_validity.sh \
+		     $(srcdir)/lib/*.py \
+		     glade/markup/check_markup.py \
+		     glade/markup/run_check_markup.sh \
 		     nosetests.sh \
 		     pylint/intl.py \
 		     pylint/preconf.py \
+		     pylint/markup.py \
 		     pylint/runpylint.sh \
 		     pylint/pylint-one.sh \
 		     testenv.sh \
@@ -58,7 +64,9 @@ TESTS = nosetests.sh \
 	gettext/gettext_potfiles.py \
 	storage/run_storage_tests.py \
 	glade/accelerators/run_check_accelerators.sh \
-	glade/pw_visibility/run_check_pw_visibility.sh
+	glade/pw_visibility/run_check_pw_visibility.sh \
+	glade/validity/run_check_glade_validity.sh \
+	glade/markup/run_check_markup.sh
 
 clean-local:
 	-rm -rf pylint/.pylint.d

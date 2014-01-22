@@ -49,13 +49,15 @@ def augmentEnv():
                })
     return env
 
-def _run_program(argv, root='/', stdin=None, stdout=None, env_prune=None):
+def _run_program(argv, root='/', stdin=None, stdout=None, env_prune=None, log_output=True, binary_output=False):
     """ Run an external program, log the output and return it to the caller
         :param argv: The command to run and argument
         :param root: The directory to chroot to before running command.
         :param stdin: The file object to read stdin from.
         :param stdout: Optional file object to write stdout and stderr to.
         :param env_prune: environment variable to remove before execution
+        :param log_output: whether to log the output of command
+        :param binary_output: whether to treat the output of command as binary data
         :return: The return code of the command and the output
     """
     if env_prune is None:
@@ -80,13 +82,21 @@ def _run_program(argv, root='/', stdin=None, stdout=None, env_prune=None):
                                     stderr=subprocess.STDOUT,
                                     preexec_fn=chroot, cwd=root, env=env)
 
-            out = proc.communicate()[0]
-            if out:
-                for line in out.splitlines():
-                    program_log.info(line)
+            output_string = proc.communicate()[0]
+            if output_string:
+                if binary_output:
+                    output_lines = [output_string]
+                else:
+                    if output_string[-1] != "\n":
+                        output_string = output_string + "\n"
+                    output_lines = output_string.splitlines(True)
+
+                for line in output_lines:
+                    if log_output:
+                        program_log.info(line.strip())
+
                     if stdout:
                         stdout.write(line)
-                        stdout.write("\n")
 
         except OSError as e:
             program_log.error("Error running %s: %s", argv[0], e.strerror)
@@ -94,10 +104,10 @@ def _run_program(argv, root='/', stdin=None, stdout=None, env_prune=None):
 
         program_log.debug("Return code: %d", proc.returncode)
 
-    return (proc.returncode, out)
+    return (proc.returncode, output_string)
 
 def execWithRedirect(command, argv, stdin=None, stdout=None,
-                     root='/', env_prune=None):
+                     root='/', env_prune=None, log_output=True, binary_output=False):
     """ Run an external program and redirect the output to a file.
         :param command: The command to run
         :param argv: The argument list
@@ -105,6 +115,8 @@ def execWithRedirect(command, argv, stdin=None, stdout=None,
         :param stdout: Optional file object to redirect stdout and stderr to.
         :param root: The directory to chroot to before running command.
         :param env_prune: environment variable to remove before execution
+        :param log_output: whether to log the output of command
+        :param binary_output: whether to treat the output of command as binary data
         :return: The return code of the command
     """
     if flags.testing:
@@ -113,14 +125,16 @@ def execWithRedirect(command, argv, stdin=None, stdout=None,
         return 0
 
     argv = [command] + argv
-    return _run_program(argv, stdin=stdin, stdout=stdout, root=root, env_prune=env_prune)[0]
+    return _run_program(argv, stdin=stdin, stdout=stdout, root=root, env_prune=env_prune,
+            log_output=log_output, binary_output=binary_output)[0]
 
-def execWithCapture(command, argv, stdin=None, root='/'):
+def execWithCapture(command, argv, stdin=None, root='/', log_output=True):
     """ Run an external program and capture standard out and err.
         :param command: The command to run
         :param argv: The argument list
         :param stdin: The file object to read stdin from.
         :param root: The directory to chroot to before running command.
+        :param log_output: Whether to log the output of command
         :return: The output of the command
     """
     if flags.testing:
@@ -129,7 +143,7 @@ def execWithCapture(command, argv, stdin=None, root='/'):
         return ""
 
     argv = [command] + argv
-    return _run_program(argv, stdin=stdin, root=root)[1]
+    return _run_program(argv, stdin=stdin, root=root, log_output=log_output)[1]
 
 def execReadlines(command, argv, stdin=None, root='/', env_prune=None):
     """ Execute an external command and return the line output of the command
@@ -279,22 +293,6 @@ def isConsoleOnVirtualTerminal(dev="console"):
     console = get_active_console(dev)          # e.g. 'tty1', 'ttyS0', 'hvc1'
     consoletype = console.rstrip('0123456789') # remove the number
     return consoletype == 'tty'
-
-def strip_markup(text):
-    if text.find("<") == -1:
-        return text
-    r = ""
-    inTag = False
-    for c in text:
-        if c == ">" and inTag:
-            inTag = False
-            continue
-        elif c == "<" and not inTag:
-            inTag = True
-            continue
-        elif not inTag:
-            r += c
-    return r.encode("utf-8")
 
 def reIPL(ipldev):
     try:
@@ -789,3 +787,21 @@ def have_word_match(str1, str2):
     str2 = str2.lower()
 
     return all(word in str2 for word in str1_words)
+
+class DataHolder(dict):
+    """ A dict that lets you also access keys using dot notation. """
+    def __init__(self, **kwargs):
+        """ kwargs are set as keys for the dict. """
+        dict.__init__(self)
+
+        for attr, value in kwargs.items():
+            self[attr] = value
+
+    def __getattr__(self, attr):
+        return self[attr]
+
+    def __setattr__(self, attr, value):
+        self[attr] = value
+
+    def copy(self):
+        return DataHolder(**dict.copy(self))

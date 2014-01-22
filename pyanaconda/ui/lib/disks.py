@@ -20,12 +20,11 @@
 #                    Chris Lumens <clumens@redhat.com>
 #
 
-from blivet.devices import MultipathDevice, iScsiDiskDevice
-from blivet.size import Size
+from blivet.devices import MultipathDevice, iScsiDiskDevice, FcoeDiskDevice
 
 from pyanaconda.flags import flags
 
-__all__ = ["FakeDiskLabel", "FakeDisk", "getDisks", "isLocalDisk", "size_str"]
+__all__ = ["FakeDiskLabel", "FakeDisk", "getDisks", "isLocalDisk"]
 
 class FakeDiskLabel(object):
     def __init__(self, free=0):
@@ -71,12 +70,6 @@ def getDisks(devicetree, fake=False):
     return sorted(list(set(disks)), key=lambda d: d.name)
 
 def isLocalDisk(disk):
-    return not isinstance(disk, MultipathDevice) and not isinstance(disk, iScsiDiskDevice)
-
-def size_str(mb):
-    if isinstance(mb, Size):
-        size = mb
-    else:
-        size = Size(en_spec="%f mb" % mb)
-
-    return str(size).upper()
+    return (not isinstance(disk, MultipathDevice)
+            and not isinstance(disk, iScsiDiskDevice)
+            and not isinstance(disk, FcoeDiskDevice))

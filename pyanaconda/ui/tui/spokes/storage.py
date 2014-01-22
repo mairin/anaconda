@@ -22,13 +22,14 @@
 # which has the same license and authored by David Lehman <dlehman@redhat.com>
 #
 
-from pyanaconda.ui.lib.disks import getDisks, size_str
+from pyanaconda.ui.lib.disks import getDisks
 from pyanaconda.ui.tui.spokes import NormalTUISpoke
 from pyanaconda.ui.tui.simpleline import TextWidget, CheckboxWidget
 
 from pykickstart.constants import AUTOPART_TYPE_LVM, AUTOPART_TYPE_BTRFS, AUTOPART_TYPE_PLAIN
 from blivet.size import Size
 from blivet.errors import StorageError
+from blivet.devices import DASDDevice, FcoeDiskDevice, iScsiDiskDevice, MultipathDevice, ZFCPDiskDevice
 from pyanaconda.flags import flags
 from pyanaconda.kickstart import doKickstartStorage
 from pyanaconda.threads import threadMgr, AnacondaThread
@@ -156,7 +157,7 @@ class StorageSpoke(NormalTUISpoke):
 
         summary = (P_(("%d disk selected; %s capacity; %s free ..."),
                       ("%d disks selected; %s capacity; %s free ..."),
-                      count) % (count, str(Size(en_spec="%f MB" % capacity)), free))
+                      count) % (count, str(Size(bytes=capacity)), free))
 
         if len(self.disks) == 0:
             summary = _("No disks detected.  Please shut down the computer, connect at least one disk, and restart to complete installation.")
@@ -189,9 +190,8 @@ class StorageSpoke(NormalTUISpoke):
 
         # loop through the disks and present them.
         for disk in self.disks:
-            size = size_str(disk.size)
-            c = CheckboxWidget(title="%i) %s: %s (%s)" % (self.disks.index(disk) + 1,
-                                                 disk.model, size, disk.name),
+            disk_info = self._format_disk_info(disk)
+            c = CheckboxWidget(title="%i) %s" % (self.disks.index(disk) + 1, disk_info),
                                completed=(disk.name in self.selected_disks))
             self._window += [c, ""]
 
@@ -209,8 +209,41 @@ class StorageSpoke(NormalTUISpoke):
 
     def _select_all_disks(self):
         """ Mark all disks as selected for use in partitioning. """
-        for i in self.disks:
-            self._update_disk_list(i)
+        for disk in self.disks:
+            if disk.name not in self.selected_disks:
+                self._update_disk_list(disk)
+
+    def _format_disk_info(self, disk):
+        """ Some specialized disks are difficult to identify in the storage
+            spoke, so add and return extra identifying information about them.
+
+            Since this is going to be ugly to do within the confines of the
+            CheckboxWidget, pre-format the display string right here.
+        """
+        # show this info for all disks
+        format_str = "%s: %s (%s)" % (disk.model, disk.size, disk.name)
+
+        disk_attrs = []
+        # now check for/add info about special disks
+        if (isinstance(disk, MultipathDevice) or isinstance(disk, iScsiDiskDevice) or isinstance(disk, FcoeDiskDevice)):
+            if hasattr(disk, "wwid"):
+                disk_attrs.append(disk.wwid)
+        elif isinstance(disk, DASDDevice):
+            if hasattr(disk, "busid"):
+                disk_attrs.append(disk.busid)
+        elif isinstance (disk, ZFCPDiskDevice):
+            if hasattr(disk, "fcp_lun"):
+                disk_attrs.append(disk.fcp_lun)
+            if hasattr(disk, "wwpn"):
+                disk_attrs.append(disk.wwpn)
+            if hasattr(disk, "hba_id"):
+                disk_attrs.append(disk.hba_id)
+
+        # now append all additional attributes to our string
+        for attr in disk_attrs:
+            format_str += ", %s" % attr
+
+        return format_str
 
     def input(self, args, key):
         """Grab the disk choice and update things"""

@@ -57,7 +57,7 @@ enum {
 #define DEFAULT_NAME          ""
 #define DEFAULT_POPUP_INFO    ""
 
-#define ICON_SIZE             128
+#define ICON_SIZE             48
 
 struct _AnacondaDiskOverviewPrivate {
     GtkWidget *grid;
@@ -227,7 +227,7 @@ static void set_icon(AnacondaDiskOverview *widget, const char *icon_name) {
             return;
         }
 
-        file = g_strdup_printf("%s/pixmaps/anaconda-selected-icon.svg", get_widgets_datadir());
+        file = g_strdup_printf("%s/pixmaps/anaconda-selected-icon.svg", anaconda_get_widgets_datadir());
         emblem_icon = g_icon_new_for_string(file, &err);
         g_free(file);
         if (!emblem_icon) {
@@ -278,7 +278,7 @@ static void anaconda_disk_overview_init(AnacondaDiskOverview *widget) {
 
     /* Create the grid. */
     widget->priv->grid = gtk_grid_new();
-    gtk_grid_set_row_spacing(GTK_GRID(widget->priv->grid), 6);
+    gtk_grid_set_row_spacing(GTK_GRID(widget->priv->grid), 2);
     gtk_grid_set_column_spacing(GTK_GRID(widget->priv->grid), 6);
     gtk_container_set_border_width(GTK_CONTAINER(widget->priv->grid), 6);
 

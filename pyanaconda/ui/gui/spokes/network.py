@@ -431,6 +431,10 @@ class NetworkControlBox(GObject.GObject):
                 # this must be some slave.
                 if dev_cfg.device_type == NetworkManager.DeviceType.ETHERNET:
                     continue
+                # Wireless settings are handled in scope of its device's dev_cfg
+                if dev_cfg.device_type == NetworkManager.DeviceType.WIFI:
+                    continue
+                # Virtual device settings (bond, team, vlan, ...)
                 self.add_dev_cfg(dev_cfg)
 
         # select the first device
@@ -686,7 +690,8 @@ class NetworkControlBox(GObject.GObject):
                 and dev_cfg.device.get_device_type() == NetworkManager.DeviceType.ETHERNET
                 and not dev_cfg.device.get_carrier()):
                 # TRANSLATORS: ethernet cable is unplugged
-                unplugged = ', <i>%s</i>' % _("unplugged")
+                unplugged = ', <i>%s</i>' % escape_markup(_("unplugged"))
+        # pylint: disable-msg=W9922
         title = '<span size="large">%s (%s%s)</span>' % \
                  (escape_markup(_(self.device_type_name.get(dev_cfg.device_type, ""))),
                   escape_markup(dev_cfg.get_iface()),

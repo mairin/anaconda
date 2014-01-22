@@ -23,7 +23,6 @@
 from gi.repository import Gtk
 
 from pyanaconda.i18n import C_, P_
-from pyanaconda.ui.lib.disks import size_str
 from pyanaconda.ui.gui import GUIObject
 from pyanaconda.ui.gui.utils import escape_markup
 from blivet.size import Size
@@ -60,8 +59,8 @@ class SelectedDisksDialog(GUIObject):
         for disk in disks:
             self._store.append([False,
                                 "%s (%s)" % (disk.description, disk.serial),
-                                size_str(disk.size),
-                                size_str(free[disk.name][0]),
+                                str(disk.size),
+                                str(free[disk.name][0]),
                                 disk.name,
                                 disk.id])
         self.disks = disks[:]
@@ -131,6 +130,7 @@ class SelectedDisksDialog(GUIObject):
         size = str(Size(bytes=long(size))).upper()
         free = str(Size(bytes=long(free))).upper()
 
+        # pylint: disable-msg=W9922
         text = P_("<b>%(count)d disk; %(size)s capacity; %(free)s free space</b> "
                    "(unpartitioned and in filesystems)",
                   "<b>%(count)d disks; %(size)s capacity; %(free)s free space</b> "

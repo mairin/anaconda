@@ -25,7 +25,6 @@ from gi.repository import Gdk, Gtk, AnacondaWidgets, Keybinder
 
 from pyanaconda.i18n import _
 from pyanaconda import product
-from pyanaconda import iutil
 
 from pyanaconda.ui import UserInterface, common
 from pyanaconda.ui.gui.utils import enlightbox, gtk_action_wait, busyCursor, unbusyCursor
@@ -41,96 +40,6 @@ _last_screenshot_timestamp = 0
 SCREENSHOT_DELAY = 1  # in seconds
 
 ANACONDA_WINDOW_GROUP = Gtk.WindowGroup()
-
-class GUICheck(object):
-    """Handle an input validation check."""
-
-    # Use as a return value to indicate a passed check
-    CHECK_OK = None
-
-    def __init__(self, parent, editable, run_check, check_data, set_error):
-        """Create a new input validation check.
-
-           :param parent: The parent GUIObject. When a check state changes,
-                          the GUICheck will call set_error(check, check-state)
-           :type parent:  GUIObject
-
-           :param editable: The input field being checked
-           :type editable:  GtkEditable
-
-           :param run_check: The check function. The function is called as
-                             check(editable, check_data). The return value is an
-                             error state object or CHECK_OK if the check succeeds.
-           :type run_check:  function
-
-           :param check_data: An optional parameter passed to check().
-
-           :param set_error: A function called when the state of this check
-                             changes. The parameters are (GUICheck, run_check_return).
-                             The return value is ignored.
-           :type set_error:  function
-        """
-
-        self._parent = parent
-        self._editable = editable
-        self._run_check = run_check
-        self._check_data = check_data
-        self._set_error = set_error
-
-        # Set to the Gtk handler ID in enable()
-        self._handler_id = None
-
-        # Initial check state
-        self._check_status = None
-
-        self.enable()
-
-    def enable(self):
-        """Enable the check.
-
-           enable() does not check the current state of the input field. To
-           check the current state, run update_check_status() after enable().
-        """
-        if not self._handler_id:
-            self._handler_id = self._editable.connect_after("changed", self.update_check_status)
-
-    def disable(self):
-        """Disable the check. The check will no longer appear in failed_checks,
-           but disabling the check does not call set_error to update the
-           GUIObject's state.
-        """
-        if self._handler_id:
-            self._editable.disconnect(self._handler_id)
-            self._handler_id = None
-            self._check_status = None
-
-    def update_check_status(self, editable=None, check_data=None):
-        """Run an input validation check."""
-
-        # Allow check parameters to be overriden in parameters
-        if editable is None:
-            editable = self._editable
-        if check_data is None:
-            check_data = self._check_data
-
-        new_check_status = self._run_check(editable, check_data)
-        check_status_changed = (self._check_status != new_check_status)
-        self._check_status = new_check_status
-
-        if check_status_changed:
-            self._set_error(self, self._check_status)
-
-    @property
-    def check_status(self):
-        return self._check_status
-
-    @property
-    def editable(self):
-        return self._editable
-
-    @property
-    def check_data(self):
-        return self._check_data
 
 class GUIObject(common.UIObject):
     """This is the base class from which all other GUI classes are derived.  It
@@ -214,8 +123,6 @@ class GUIObject(common.UIObject):
         Keybinder.init()
         Keybinder.bind("<Shift>Print", self._handlePrntScreen, [])
 
-        self._check_list = []
-
     def _findUIFile(self):
         path = os.environ.get("UIPATH", "./:/tmp/updates/:/tmp/updates/ui/:/usr/share/anaconda/ui/")
         dirs = path.split(":")
@@ -243,12 +150,13 @@ class GUIObject(common.UIObject):
 
             fn = os.path.join(self.screenshots_directory,
                               "screenshot-%04d.png" % _screenshotIndex)
-            rc = iutil.execWithRedirect("scrot", [fn])
-            if rc == 0:
-                log.info("screenshot nr. %d taken", _screenshotIndex)
-                _screenshotIndex += 1
-            else:
-                log.error("taking screenshot failed")
+            root_window = Gdk.get_default_root_window()
+            pixbuf = Gdk.pixbuf_get_from_window(root_window, 0, 0,
+                                                root_window.get_width(),
+                                                root_window.get_height())
+            pixbuf.savev(fn, 'png', [], [])
+            log.info("screenshot nr. %d taken", _screenshotIndex)
+            _screenshotIndex += 1
             # start counting from the time the screenshot operation is done
             _last_screenshot_timestamp = time.time()
 
@@ -293,173 +201,6 @@ class GUIObject(common.UIObject):
            messages.  A suitable background color and icon will be displayed.
         """
         self.window.set_warning(msg)
-
-    def add_check(self, editable, run_check, check_data=None, set_error=None):
-        """Add an input validation check to this object.
-
-           This function creates new GUICheck object and adds it to this
-           GUIObject. The check is run any time the input field changes.
-           If the result of a check changes, the check object will call
-           the set_error function. By default, set_error will call
-           self.set_warning with the status of the first failed check.
-
-           :param editable: the input field to validate
-           :type editable: GtkEditable
-
-           :param run_check: a function called to validate the input field. The
-                         parameters are (editable, check_data). The return
-                         value is an error state object or GUICheck.CHECK_OK if
-                         the check passes.
-           :type run_check: function
-
-           :param check_data: additional data to pass to the check function
-
-           :param set_error: a function called when a check changes state. The
-                         parameters are (GUICheck, run_check_return).  The
-                         return value is ignored.
-           :type set_error: function
-
-           :returns: A check object
-           :rtype: GUICheck
-        """
-
-        if not set_error:
-            set_error = self.set_check_error
-
-        checkRef = GUICheck(self, editable, run_check, check_data, set_error)
-        self._check_list.append(checkRef)
-        return checkRef
-
-    def add_re_check(self, editable, regex, message, set_error=None):
-        """Add a check using a regular expresion.
-
-           :param editable: the input field to validate
-           :type editable:  GtkEditable
-
-           :param regex: the regular expression to use to check the input
-           :type regex:  re.RegexObject
-
-           :param message: The message to set if the regex does not match
-           :type message:  str
-
-           :param set_error: a function called when a check changes state. The
-                         parameters are (GUICheck, run_check_return).  The
-                         return value is ignored.
-           :type set_error: function
-
-           :returns: A check object
-           :rtype: GUICheck
-        """
-        if not set_error:
-            set_error = self.set_check_error
-        return self.add_check(editable=editable, run_check=check_re,
-                check_data={'regex': regex, 'message': message}, set_error=set_error)
-
-    def set_check_error(self, check, check_return):
-        """Update the warning with the input validation check error."""
-        # Grab the first failed check
-        failed_check = next(self.failed_checks, None)
-
-        self.clear_info()
-        if failed_check:
-            self.set_warning(failed_check.check_status)
-            self.window.show_all()
-
-    @property
-    def failed_checks(self):
-        """A generator of all failed input checks"""
-        return (c for c in self._check_list if c.check_status)
-
-    @property
-    def checks(self):
-        """An iterator over all input checks"""
-        return self._check_list.__iter__()
-
-class GUIDialog(GUIObject):
-    """This is an abstract for creating dialog windows. It displays an error
-       message when an input validation fails.
-
-       GUIDialog does not define where errors are displayed, so classes
-       that derive from GUIDialog must define error labels and include them
-       as the check_data parameter to add_check. More than one check can use
-       the same label: the message from the first failed check will update the
-       label.
-    """
-
-    def __init__(self, data):
-        if self.__class__ is GUIDialog:
-            raise TypeError("GUIDialog is an abstract class")
-
-        GUIObject.__init__(self, data)
-
-    def add_check_with_error_label(self, editable, error_label, run_check,
-            check_data=None, set_error=None):
-        """Add an input validation check to this dialog. The error_label will
-           be added to the check_data for the validation check and will be
-           used to display the error message if the check fails.
-
-           :param editable: the input field to validate
-           :type editable: GtkEditable
-
-           :param error_label: the label in which to display the error data
-           :type error_label:  GtkLabel
-
-           :param run_check: a function called to validate the input field. The
-                         parameters are (editable, check_data). The return
-                         value is an error state object or GUICheck.CHECK_OK if
-                         the check passes.
-           :type run_check: function
-
-           :param check_data: additional data to pass to the check function
-
-           :param set_error: a function called when a check changes state. The
-                         parameters are (GUICheck, run_check_return).  The
-                         return value is ignored.
-           :type set_error: function
-
-           :returns: A check object
-           :rtype: GUICheck
-        """
-        if not set_error:
-            set_error = self.set_check_error
-
-        return self.add_check(editable=editable, run_check=run_check,
-                check_data={'error_label': error_label, 'message': check_data},
-                set_error=set_error)
-
-    def add_re_check_with_error_label(self, editable, error_label, regex, message, set_error=None):
-        """Add a check using a regular expression."""
-        # Use the GUIObject function so we can create the check_data dictionary here
-        if not set_error:
-            set_error = self.set_check_error
-
-        return self.add_check(editable=editable, run_check=check_re,
-                check_data={'error_label': error_label, 'message': message, 'regex': regex},
-                set_error=set_error)
-
-    def set_check_error(self, check, check_return):
-        """Update all input check failure messages.
-
-           If multiple checks use the same GtkLabel, only the first one will
-           be used.
-        """
-
-        # If the signaling check passed, clear its error label
-        if not check_return:
-            if 'error_label' in check.check_data:
-                check.check_data['error_label'].set_text('')
-
-        # Keep track of which labels have errors set. If we see an error for
-        # a label that's already been set, skip it.
-        labels_seen = []
-        for failed_check in self.failed_checks:
-            if not 'error_label' in failed_check.check_data:
-                continue
-
-            label = failed_check.check_data['error_label']
-            if label not in labels_seen:
-                labels_seen.append(label)
-                label.set_text(failed_check.check_status)
 
 class QuitDialog(GUIObject):
     builderObjects = ["quitDialog"]
@@ -789,21 +530,3 @@ class GraphicalExceptionHandlingIface(meh.ui.gui.GraphicalIntf):
         unbusyCursor()
 
         return exc_window
-
-def check_re(editable, data):
-    """Perform an input validation check against a regular expression.
-
-       :param editable: The input field being checked
-       :type editable:  GtkEditable
-
-       :param data: The check_data set in add_check. This data must
-                    be a dictionary that includes the keys
-                    'regex' and 'message'.
-       :type data:  dict
-
-       :returns: error_data if the check fails, otherwise GUICheck.CHECK_OK.
-    """
-    if data['regex'].match(editable.get_text()):
-        return GUICheck.CHECK_OK
-    else:
-        return data['message']

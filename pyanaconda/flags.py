@@ -55,8 +55,6 @@ class Flags(object):
         self.selinux = SELINUX_DEFAULT
         self.debug = 0
         self.targetarch = None
-        self.useIPv4 = True
-        self.useIPv6 = True
         self.armPlatform = None
         self.preexisting_x11 = False
         self.noverifyssl = False
@@ -81,7 +79,8 @@ class Flags(object):
             self.read_cmdline()
 
     def read_cmdline(self):
-        for f in ("selinux", "debug", "leavebootorder", "testing"):
+        for f in ("selinux", "debug", "leavebootorder", "testing", "extlinux",
+                  "gpt", "dnf"):
             self.set_cmdline_bool(f)
 
         if "rpmarch" in self.cmdline:
@@ -89,15 +88,6 @@ class Flags(object):
 
         if not selinux.is_selinux_enabled():
             self.selinux = 0
-
-        if "extlinux" in self.cmdline:
-            self.extlinux = True
-
-        if "gpt" in self.cmdline:
-            self.gpt = True
-
-        if "dnf" in self.cmdline:
-            self.dnf = True
 
 cmdline_files = ['/proc/cmdline', '/run/install/cmdline',
                  '/run/install/cmdline.d/*.conf', '/etc/cmdline']
@@ -155,7 +145,16 @@ class BootArgs(OrderedDict):
 
         lst = shlex.split(cmdline)
 
+        # options might have the inst. prefix (used to differentiate
+        # boot options for the installer from other boot options)
+        inst_prefix = "inst."
+
         for i in lst:
+            # drop the inst. prefix (if found), so that getbool() works
+            # consistently for both "foo=0" and "inst.foo=0"
+            if i.startswith(inst_prefix):
+                i = i[len(inst_prefix):]
+
             if "=" in i:
                 (key, val) = i.split("=", 1)
             else:
@@ -211,6 +210,5 @@ def can_touch_runtime_system(msg, touch_live=False):
 
     return True
 
-global flags
 flags = Flags()
 

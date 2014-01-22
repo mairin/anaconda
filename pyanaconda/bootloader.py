@@ -39,6 +39,7 @@ from blivet.fcoe import fcoe
 import pyanaconda.network
 from pyanaconda.nm import nm_device_hwaddress
 from blivet import platform
+from blivet.size import Size
 from pyanaconda.i18n import _, N_
 
 import logging
@@ -243,7 +244,7 @@ class BootLoader(object):
     stage2_bootable = False
     stage2_must_be_primary = True
     stage2_description = N_("/boot filesystem")
-    stage2_max_end_mb = 2 * 1024 * 1024
+    stage2_max_end = Size(spec="2 TiB")
 
     @property
     def stage2_format_types(self):
@@ -307,13 +308,11 @@ class BootLoader(object):
     #
     # disk list access
     #
-    # pylint: disable-msg=E0202
     @property
     def disk_order(self):
         """Potentially partial order for disks."""
         return self._disk_order
 
-    # pylint: disable-msg=E0102,E0202,E1101
     @disk_order.setter
     def disk_order(self, order):
         log.debug("new disk order: %s", order)
@@ -339,7 +338,6 @@ class BootLoader(object):
     #
     # image list access
     #
-    # pylint: disable-msg=E0202
     @property
     def default(self):
         """The default image."""
@@ -348,7 +346,6 @@ class BootLoader(object):
 
         return self._default_image
 
-    # pylint: disable-msg=E0102,E0202,E1101
     @default.setter
     def default(self, image):
         if image not in self.images:
@@ -490,15 +487,15 @@ class BootLoader(object):
         log.debug("_is_valid_size(%s) returning %s", device.name, ret)
         return ret
 
-    def _is_valid_location(self, device, max_mb=None, desc=""):
+    def _is_valid_location(self, device, max_end=None, desc=""):
         ret = True
-        if max_mb and device.type == "partition" and device.partedPartition:
+        if max_end and device.type == "partition" and device.partedPartition:
             end_sector = device.partedPartition.geometry.end
             sector_size = device.partedPartition.disk.device.sectorSize
-            end_mb = (sector_size * end_sector) / (1024.0 * 1024.0)
-            if end_mb > max_mb:
-                self.errors.append(_("%(desc)s must be within the first %(max_mb)dMB of "
-                                     "the disk.") % {"desc": desc, "max_mb": max_mb})
+            end = Size(bytes=sector_size * end_sector)
+            if end > max_end:
+                self.errors.append(_("%(desc)s must be within the first %(max_end)s of "
+                                     "the disk.") % {"desc": desc, "max_end": max_end})
                 ret = False
 
         log.debug("_is_valid_location(%s) returning %s", device.name, ret)
@@ -612,7 +609,7 @@ class BootLoader(object):
             valid = False
 
         if not self._is_valid_location(device,
-                                       max_mb=constraint["max_end_mb"],
+                                       max_end=constraint["max_end"],
                                        desc=description):
             valid = False
 
@@ -714,7 +711,7 @@ class BootLoader(object):
             valid = False
 
         if not self._is_valid_location(device,
-                                       max_mb=self.stage2_max_end_mb,
+                                       max_end=self.stage2_max_end,
                                        desc=_(self.stage2_description)):
             valid = False
 
@@ -757,7 +754,6 @@ class BootLoader(object):
     def has_windows(self, devices):
         return False
 
-    # pylint: disable-msg=E0202
     @property
     def timeout(self):
         """Bootloader timeout in seconds."""
@@ -772,17 +768,14 @@ class BootLoader(object):
         """ Run additional bootloader checks """
         return True
 
-    # pylint: disable-msg=E0102,E0202,E1101
     @timeout.setter
     def timeout(self, seconds):
         self._timeout = seconds
 
-    # pylint: disable-msg=E0202
     @property
     def update_only(self):
         return self._update_only
 
-    # pylint: disable-msg=E0102,E0202,E1101
     @update_only.setter
     def update_only(self, value):
         if value and not self.can_update:
@@ -1642,6 +1635,8 @@ class EFIGRUB(GRUB2):
             exec_func = iutil.execWithCapture
         else:
             exec_func = iutil.execWithRedirect
+        if "root" not in kwargs:
+            kwargs["root"] = ROOT_PATH
 
         return exec_func("efibootmgr", list(args), **kwargs)
 
@@ -1664,8 +1659,7 @@ class EFIGRUB(GRUB2):
                     log.warning("failed to parse efi boot slot (%s)", slot)
                     continue
 
-                rc = self.efibootmgr("-b", slot_id, "-B",
-                                     root=ROOT_PATH)
+                rc = self.efibootmgr("-b", slot_id, "-B")
                 if rc:
                     raise BootLoaderError("failed to remove old efi boot entry")
 
@@ -1688,8 +1682,7 @@ class EFIGRUB(GRUB2):
         rc = self.efibootmgr("-c", "-w", "-L", productName,
                              "-d", boot_disk.path, "-p", boot_part_num,
                              "-l",
-                             self.efi_dir_as_efifs_dir + "\\shim.efi",
-                             root=ROOT_PATH)
+                             self.efi_dir_as_efifs_dir + "\\shim.efi")
         if rc:
             raise BootLoaderError("failed to set new efi boot target")
 

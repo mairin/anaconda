@@ -2,10 +2,8 @@
 
 : "${top_srcdir:=$(dirname "$0")/../../..}"
 . "${top_srcdir}/tests/testenv.sh"
-srcdir="${top_srcdir}/tests/glade/accelerators"
+srcdir="${top_srcdir}/tests/glade/markup"
 
-# If --translate was specified but not --podir, add --podir
-i=0
 translate_set=0
 podir_set=0
 for arg in "$@" ; do
@@ -20,4 +18,4 @@ if [ "$translate_set" -eq 1 -a "$podir_set" -eq 0 ]; then
     set -- "$@" --podir "${top_srcdir}/po"
 fi
 
-find "${top_srcdir}" -name '*.glade' -exec "${srcdir}/check_accelerators.py" "$@" {} +
+find "${top_srcdir}/pyanaconda" -name '*.glade' -exec "${srcdir}/check_markup.py" "$@" {} +

@@ -1,7 +1,7 @@
 # vim: set fileencoding=utf-8
 # Mountpoint selector accordion and page classes
 #
-# Copyright (C) 2012  Red Hat, Inc.
+# Copyright (C) 2012-2014  Red Hat, Inc.
 #
 # This copyrighted material is made available to anyone wishing to use,
 # modify, copy, or redistribute it subject to the terms and conditions of
@@ -20,11 +20,10 @@
 # Red Hat Author(s): Chris Lumens <clumens@redhat.com>
 #
 
-from blivet.size import Size
 
 from pyanaconda.i18n import _
 from pyanaconda.product import productName, productVersion
-from pyanaconda.ui.gui.utils import escape_markup
+from pyanaconda.ui.gui.utils import escape_markup, really_hide, really_show
 
 from gi.repository.AnacondaWidgets import MountpointSelector
 from gi.repository import Gtk
@@ -59,14 +58,12 @@ def selectorFromDevice(device, selector=None, mountpoint=""):
     else:
         mp = _("Unknown")
 
-    size = Size(en_spec="%f MB" % device.size)
-
     if not selector:
-        selector = MountpointSelector(device.name, str(size).upper(), mp)
+        selector = MountpointSelector(device.name, str(device.size), mp)
         selector._root = None
     else:
         selector.props.name = device.name
-        selector.props.size = str(size).upper()
+        selector.props.size = str(device.size)
         selector.props.mountpoint = mp
 
     selector._device = device
@@ -156,7 +153,11 @@ class Page(Gtk.Box):
 
         # Create the Data label and a box to store all its members in.
         self._dataBox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
-        self._dataBox.add(self._make_category_label(_("DATA")))
+        self._dataLabel = self._make_category_label(_("DATA"))
+        really_hide(self._dataLabel)
+        self._dataBox.add(self._dataLabel)
+        self._dataBox.connect("add", self._onDataAdded)
+        self._dataBox.connect("remove", self._onDataRemoved)
         self.add(self._dataBox)
 
         # Create the System label and a box to store all its members in.
@@ -224,6 +225,15 @@ class Page(Gtk.Box):
         # _onSelectorClicked
         cb(selector)
 
+    def _onDataAdded(self, container, widget):
+        really_show(self._dataLabel)
+
+    def _onDataRemoved(self, container, widget):
+        # This runs before widget is removed from container, so if it's the last
+        # item then the container will still not be empty.
+        if len(container.get_children()) == 1:
+            really_hide(self._dataLabel)
+
 class UnknownPage(Page):
     def __init__(self, title):
         # For this type of page, there's only one place to store members.
@@ -268,44 +278,55 @@ class CreateNewPage(Page):
                             "You can:") % {"product" : productName, "version" : productVersion})
         label.set_line_wrap(True)
         label.set_alignment(0, 0.5)
-        self._createBox.attach(label, 0, 0, 2, 1)
+        self._createBox.attach(label, 0, 0, 3, 1)
 
         dot = Gtk.Label("•")
+        dot.set_alignment(0.5, 0)
         dot.set_hexpand(False)
         self._createBox.attach(dot, 0, 1, 1, 1)
 
-        self._createNewButton = Gtk.LinkButton("", label=_("_Click here to create them automatically."))
-        label = self._createNewButton.get_children()[0]
-        label.set_alignment(0, 0.5)
-        label.set_hexpand(True)
-        label.set_line_wrap(True)
+        label = Gtk.Label(_("Create them _automatically:"))
         label.set_use_underline(True)
+        label.set_line_wrap(True)
+        label.set_alignment(0, 0.5)
+        self._createBox.attach(label, 1, 1, 2, 1)
 
-        self._createNewButton.set_has_tooltip(False)
-        self._createNewButton.set_halign(Gtk.Align.START)
-        self._createNewButton.connect("clicked", cb)
-        self._createNewButton.connect("activate-link", lambda *args: Gtk.true())
-        self._createBox.attach(self._createNewButton, 1, 1, 1, 1)
+        combo = Gtk.ComboBoxText()
+        label.set_mnemonic_widget(combo)
+        combo.append_text(_("Standard Partition"))
+        combo.append_text(_("BTRFS"))
+        combo.append_text(_("LVM"))
+        combo.append_text(_("LVM Thin Provisioning"))
+        combo.set_active(2)
+        self._createBox.attach(combo, 1, 2, 1, 1)
+
+        button = Gtk.Button(_("_Create"))
+        button.set_margin_end(6)
+        button.set_use_underline(True)
+        button.connect("clicked", cb, combo)
+        self._createBox.attach(button, 2, 2, 1, 1)
 
         dot = Gtk.Label("•")
+        dot.set_alignment(0.5, 0)
         dot.set_hexpand(False)
-        self._createBox.attach(dot, 0, 2, 1, 1)
+        self._createBox.attach(dot, 0, 3, 1, 1)
 
         label = Gtk.Label(_("Create new mount points by clicking the '+' button."))
         label.set_alignment(0, 0.5)
         label.set_hexpand(True)
         label.set_line_wrap(True)
-        self._createBox.attach(label, 1, 2, 1, 1)
+        self._createBox.attach(label, 1, 3, 2, 1)
 
         if partitionsToReuse:
             dot = Gtk.Label("•")
+            dot.set_alignment(0.5, 0)
             dot.set_hexpand(False)
-            self._createBox.attach(dot, 0, 3, 1, 1)
+            self._createBox.attach(dot, 0, 4, 1, 1)
 
             label = Gtk.Label(_("Or, assign new mount points to existing partitions after selecting them below."))
             label.set_alignment(0, 0.5)
             label.set_hexpand(True)
             label.set_line_wrap(True)
-            self._createBox.attach(label, 1, 3, 1, 1)
+            self._createBox.attach(label, 1, 4, 2, 1)
 
         self.add(self._createBox)

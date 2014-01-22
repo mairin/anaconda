@@ -21,7 +21,6 @@ Source0: %{name}-%{version}.tar.bz2
 # Also update in AM_GNU_GETTEXT_VERSION in configure.ac
 %define gettextver 0.18.3
 %define intltoolver 0.31.2-3
-%define libnlver 1.0
 %define pykickstartver 1.99.46
 %define yumver 3.4.3-91
 %define dnfver 0.4.8
@@ -50,12 +49,13 @@ BuildRequires: audit-libs-devel
 BuildRequires: gettext >= %{gettextver}
 BuildRequires: gtk3-devel
 BuildRequires: gtk-doc
+BuildRequires: gtk3-devel-docs
+BuildRequires: glib2-doc
 BuildRequires: gobject-introspection-devel
 BuildRequires: glade-devel
 BuildRequires: pygobject3
 BuildRequires: intltool >= %{intltoolver}
 BuildRequires: libgnomekbd-devel
-BuildRequires: libnl-devel >= %{libnlver}
 BuildRequires: libxklavier-devel >= %{libxklavierver}
 BuildRequires: pango-devel
 BuildRequires: pykickstart >= %{pykickstartver}
@@ -91,7 +91,7 @@ The anaconda package is a metapackage for the Anaconda installer.
 %package core
 Summary: Core of the Anaconda installer
 Requires: dnf >= %{dnfver}
-Requires: python-blivet >= 0.33
+Requires: python-blivet >= 0.37
 Requires: python-meh >= %{mehver}
 Requires: libreport-anaconda >= 2.0.21-1
 Requires: libselinux-python
@@ -168,7 +168,6 @@ Requires: nm-connection-editor
 %ifarch %livearches
 Requires: zenity
 %endif
-Requires: scrot
 Requires: keybinder3
 
 %description gui
@@ -299,6 +298,148 @@ update-desktop-database &> /dev/null || :
 %{_prefix}/libexec/anaconda/dd_*
 
 %changelog
+* Tue Jan 21 2014 Brian C. Lane <bcl@redhat.com> - 21.17-1
+- Test for DataHolder Class (#1034427) (bcl)
+- Use DataHolder for TUI nfs data (#1034427) (bcl)
+- Add DataHolder class (#1034427) (bcl)
+- Handle inst.{gpt,dnf,extlinux} using cmdline.getbool() (wwoods)
+- Drop unreferenced 'useIPv[46]' flag (wwoods)
+- Don't force shell on tty2 (#980062) (wwoods)
+- add comment about boot-options.txt (wwoods)
+- Add support for getting stage2 image from boot.iso (#1035514) (mkolman)
+- Various changes to handling of filesystem label setting (#1038590) (amulhern)
+- Fix translation context on the storage options dialogs. (clumens)
+- Fix problems going into custom partitioning with the new work flow. (clumens)
+- Don't show actions next to free space lines in the reclaim dialog (#1054208).
+  (clumens)
+- If there's a label in the ISO device combo, put it on a new line (#1031727).
+  (clumens)
+- Make the device name in a MountpointSelector less wide (#1048583). (clumens)
+- If a root password is set, don't show the spoke (#910355, #1041405).
+  (clumens)
+- Check for certain disk attrs before trying to access them. (#1053055)
+  (sbueno+anaconda)
+- Use gtk_get_locale_direction. (dshea)
+- Always run efibootmgr from ROOT_PATH (bcl)
+- A class for scheduling Gtk actions and running them all at once (vpodzime)
+- Remove some leftover float conversions. (dshea)
+- Use uint64 for the resize target size. (dshea)
+- Return program output as a string instead of a list (dshea)
+- Implement and use a function for one-off running Gtk actions (vpodzime)
+- Be more defensive when getting layouts and their variants (vpodzime)
+- Implement and use functions for conversion between keymaps and layouts
+  (vpodzime)
+- Fix reset of existing device to its original size. (dlehman)
+- Don't disable checks for global at the module level. (dshea)
+- Clean up the pylint-false-positives. (dshea)
+- Remove pylint comments that are no longer necessary (dshea)
+- Allow pylint-false-positives to end with a newline (dshea)
+- Change storage widget visibility based on disks selected. (clumens)
+- Rename widgets in the two remaining options dialogs. (clumens)
+- Allow going to the reclaim dialog even for autopart (#1014671). (clumens)
+- Add the autopart type combo to custom storage (#1014671). (clumens)
+- Tweak DiskOverview spacing a little bit (#1014671). (clumens)
+- Add custom part and encryption buttons to the main storage spoke (#1014671).
+  (clumens)
+- Remove the existing install_options1 dialog, rename the others (#1014671).
+  (clumens)
+- Grow the spoke gradient image to fit the nav_area (#1035772). (clumens)
+- Additional completion checks in network spoke. (#1044571) (sbueno+anaconda)
+- Fix problems reported by pylint (dshea)
+- Decode potentially 8-bit strings in TUI windows (dshea)
+
+* Fri Jan 10 2014 Brian C. Lane <bcl@redhat.com> - 21.16-1
+- Use blivet.size.Size for all size quantities. (dlehman)
+- make anaconda-shell (wwoods)
+- handle "ks=cdrom[:<path>]" on systems with multiple CDs (#1049237) (wwoods)
+- dracut: add when_any_cdrom_appears for cdrom autoprobe (wwoods)
+- dracut: minor shell cleanup (wwoods)
+- fix inst.noshell (#807703) (wwoods)
+- Error gracefully if we have a question in cmdline mode. (#869731)
+  (sbueno+anaconda)
+- Verify that designated label can be set (#1038590) (amulhern)
+- Do not change sensitivity of label field (#1038590) (amulhern)
+- Make the clear icon functional in language spoke. (sbueno+anaconda)
+- Fix the translated pango markup check (dshea)
+- Remove iutil.strip_markup. (dshea)
+- Pass additional command-line arguments to pylint (dshea)
+- Fix and ignore markup warnings where appropriate (dshea)
+- Check that the Pango markup in glade files is valid (dshea)
+- Added a pylint module to check pango markup. (dshea)
+- Split the po-based translation code into a separate file. (dshea)
+- Fix bool parsing of boot options with inst. prefix (#1044391) (mkolman)
+- Use vc_keymap as X layout only if we get nothing from localed (#1048592)
+  (vpodzime)
+- Warn user if entering LUKS password with non-ASCII characters (#1039168)
+  (vpodzime)
+- Add back some erroneously removed set_use_underline calls (dshea)
+- Only show the "DATA" heading if there are data mount points under it.
+  (clumens)
+- Don't allow the advanced user dialog to be saved with errors (dshea)
+- Move the add_check stuff into helper classes. (dshea)
+- Remove the UID and GID maximums. (#978846) (dshea)
+- Fix an invalid mnemonic widget reference in passphrase entry (dshea)
+- Added checks for some potential issues in glade files (dshea)
+- Remove scrot dependency for global screenshot support (mkolman)
+- Fix mnemonic widget reference id (vpodzime)
+
+* Tue Jan 07 2014 Brian C. Lane <bcl@redhat.com> - 21.15-1
+- Use the new Gtk.ListBox for displaying environments and addons (#1039683).
+  (clumens)
+- Display additional disk attributes in TUI storage spoke. (#1024760)
+  (sbueno+anaconda)
+- Fix 'select all disks' logic in TUI storage spoke. (sbueno+anaconda)
+- Ignore the compile script (dshea)
+- network GUI: don't crash when wifi is activated in standalone spoke
+  (#1046138) (rvykydal)
+- Use the right test for there being any storage actions. (clumens)
+- Only display the actions summary dialog if there are any actions (#1030511).
+  (clumens)
+- Do not support kickstart+live installs (#1027160). (clumens)
+- We no longer directly use libnl (#1034830). (clumens)
+- Remove _transactionErrors from yumpayload.py. (clumens)
+- Move xhost handling to the xinit script (#1045280) (dshea)
+- Check for ready before baseRepo in completed (#1044985) (bcl)
+- Treat the output of vncpasswd as binary data, since it is (#1045119) (dshea)
+- Add iutil.exec* options for handling binary data (dshea)
+- Print a message and exit if a user attempts to upgrade via kickstart. (dshea)
+
+* Wed Dec 18 2013 Brian C. Lane <bcl@redhat.com> - 21.14-1
+- Fix the release notes image cycler. (#1043393) (dshea)
+- Do not schedule resize actions for non-resizing requests (#1039491)
+  (vpodzime)
+- Use ceil for minSize in resize dialog (#1040012) (bcl)
+- Use integer numbers of megabytes in the Reclaim dialog (#1040012) (vpodzime)
+- fcoe gui: repopulate device tree only if device was actually added (#1039223)
+  (rvykydal)
+- Exclude FCoE disks from local disks (#1039223) (rvykydal)
+- fcoe: repopulate devicetree after adding FCoE SAN (#1039223) (rvykydal)
+- Add initial 64-bit ARM aarch64 EFI support (#1034428) (dmarlin)
+- Rename network spoke header (mkolman)
+- Show the Shell spoke in debug mode (vpodzime)
+- Accept only .iso files from the IsoChooser dialog (#1015169) (vpodzime)
+- Just run the IsoChooser dialog lightbox (vpodzime)
+- Use libxklavier's new methods instead of our nasty hack (vpodzime)
+- Move atexit registration before running rescue mode (#1038855) (vpodzime)
+- Only display the addon separator if there's a reason to. (clumens)
+- Stop using deprecated gtk margin functions. (clumens)
+- Fix the check_accelerators srcdir path. (dshea)
+- Show msg in TUI if user attempts to create invalid username. (#965561)
+  (sbueno+anaconda)
+- Fix up username checking regex a bit. (sbueno+anaconda)
+- Fix default device for ks=cdrom (#1042500) (bcl)
+- createUser is already in a chroot (#1038241) (bcl)
+- Skip checks on files that are not staged for commit. (dshea)
+- Allow catching exceptions from threads (vpodzime)
+- Enable warnings about abstract methods not overridden (dshea)
+- Provide empty methods to override abstract parent methods. (dshea)
+- Implement status in StandaloneSpoke. (dshea)
+- Move a bunch of abstract methods from Payload to PackagePayload (dshea)
+- Remove some methods from packaging.Payload. (dshea)
+- Disable abstract method warnings in intermediate abstract classes. (dshea)
+- Remove Personalization spoke (dshea)
+- Remove some vestigal code from an earlier version of GUICheck (dshea)
+
 * Thu Dec 12 2013 Brian C. Lane <bcl@redhat.com> - 21.13-1
 - Refresh environment addons on source change (#1033749) (bcl)
 - Fix selector device matching for unallocated partitions. (#1039292) (dlehman)

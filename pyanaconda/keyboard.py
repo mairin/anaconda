@@ -150,13 +150,13 @@ def populate_missing_items(keyboard):
     localed = LocaledWrapper()
 
     if keyboard.x_layouts and not keyboard.vc_keymap:
-        keyboard.vc_keymap = localed.set_and_convert_layout(keyboard.x_layouts[0])
+        keyboard.vc_keymap = localed.convert_layout(keyboard.x_layouts[0])
 
     if not keyboard.vc_keymap:
         keyboard.vc_keymap = DEFAULT_KEYBOARD
 
     if not keyboard.x_layouts:
-        c_lay_var = localed.set_and_convert_keymap(keyboard.vc_keymap)
+        c_lay_var = localed.convert_keymap(keyboard.vc_keymap)
         keyboard.x_layouts.append(c_lay_var)
 
 def write_keyboard_config(keyboard, root, convert=True):
@@ -325,7 +325,7 @@ def activate_keyboard(keyboard):
         if c_lay_var:
             # suggested by systemd-localed for a requested VConsole keymap
             keyboard.x_layouts.append(c_lay_var)
-        if keyboard.vc_keymap:
+        elif keyboard.vc_keymap:
             # nothing suggested by systemd-localed, but we may try to use the
             # same string for both VConsole keymap and X layout (will fail
             # safely if it doesn't work)
@@ -751,6 +751,9 @@ class LocaledWrapper(object):
         diff = len(layouts) - len(variants)
         variants.extend(diff * [""])
 
+        # if there are more variants than layouts, throw the trailing ones away
+        variants = variants[:len(layouts)]
+
         # map can be used with multiple lists and works like zipWith (Haskell)
         return map(_join_layout_variant, layouts, variants)
 
@@ -791,6 +794,27 @@ class LocaledWrapper(object):
 
         dbus_call_safe_sync(LOCALED_SERVICE, LOCALED_OBJECT_PATH, LOCALED_IFACE,
                             "SetVConsoleKeyboard", args, self._connection)
+
+    def convert_keymap(self, keymap):
+        """
+        Method that returns X11 layouts and variants that (systemd-localed
+        thinks) match given keymap best.
+
+        :param keymap: VConsole keymap
+        :type keymap: str
+        :return: X11 layouts and variants that (systemd-localed thinks) match
+                 given keymap best
+        :rtype: str
+
+        """
+
+        # hack around systemd's lack of functionality -- no function to just
+        # convert without changing keyboard configuration
+        orig_keymap = self.keymap
+        ret = self.set_and_convert_keymap(keymap)
+        self.set_keymap(orig_keymap)
+
+        return ret
 
     def set_and_convert_keymap(self, keymap):
         """
@@ -861,3 +885,24 @@ class LocaledWrapper(object):
         self.set_layouts([layout_variant], convert=True)
 
         return self.keymap
+
+    def convert_layout(self, layout_variant):
+        """
+        Method that returns VConsole keymap that (systemd-localed thinks)
+        matches given layout and variant best.
+
+        :param layout_variant: 'layout (variant)' or 'layout' specification
+        :type layout_variant: str
+        :return: a keymap matching layout and variant best
+        :rtype: string
+
+        """
+
+        # hack around systemd's lack of functionality -- no function to just
+        # convert without changing keyboard configuration
+        orig_layouts_variants = self.layouts_variants
+        ret = self.set_and_convert_layout(layout_variant)
+        self.set_layouts(orig_layouts_variants)
+
+        return ret
+

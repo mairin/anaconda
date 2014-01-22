@@ -36,7 +36,7 @@ from pyanaconda.ui.communication import hubQ
 from pyanaconda.ui.gui import GUIObject
 from pyanaconda.ui.gui.spokes import NormalSpoke
 from pyanaconda.ui.gui.categories.software import SoftwareCategory
-from pyanaconda.ui.gui.utils import enlightbox, gtk_action_wait
+from pyanaconda.ui.gui.utils import enlightbox, fire_gtk_action
 from pyanaconda.iutil import ProxyString, ProxyStringError, cmp_obj_attrs
 from pyanaconda.ui.gui.utils import gtk_call_once, really_hide, really_show
 from pyanaconda.threads import threadMgr, AnacondaThread
@@ -489,7 +489,10 @@ class SourceSpoke(NormalSpoke):
 
     @property
     def completed(self):
-        if flags.automatedInstall and (not self.data.method.method or not self.payload.baseRepo):
+        """ WARNING: This can be called before _initialize is done, make sure that it
+            doesn't access things that are not setup (eg. payload.*) until it is ready
+        """
+        if flags.automatedInstall and self.ready and (not self.data.method.method or not self.payload.baseRepo):
             return False
         else:
             return not self._error and self.ready and (self.data.method.method or self.payload.baseRepo)
@@ -620,12 +623,8 @@ class SourceSpoke(NormalSpoke):
             self._cdrom = opticalInstallMedia(self.storage.devicetree)
 
         if self._cdrom:
-            @gtk_action_wait
-            def gtk_action_1():
-                self._autodetectDeviceLabel.set_text(_("Device: %s") % self._cdrom.name)
-                self._autodetectLabel.set_text(_("Label: %s") % (getattr(self._cdrom.format, "label", "") or ""))
-
-            gtk_action_1()
+            fire_gtk_action(self._autodetectDeviceLabel.set_text, _("Device: %s") % self._cdrom.name)
+            fire_gtk_action(self._autodetectLabel.set_text, _("Label: %s") % (getattr(self._cdrom.format, "label", "") or ""))
             added = True
 
         if self.data.method.method == "harddrive":
@@ -668,6 +667,12 @@ class SourceSpoke(NormalSpoke):
                          "format": dev.format.name or "",
                          "label" : dev.format.label or dev.format.uuid or ""
                        }
+
+            # With the label in here, the combo box can appear really long thus pushing the "pick an image"
+            # and the "verify" buttons off the screen.
+            if dev_info["label"] != "":
+                dev_info["label"] = "\n" + dev_info["label"]
+
             store.append([dev, "%(model)s %(path)s (%(size)s MB) %(format)s %(label)s" % dev_info])
             if self.data.method.method == "harddrive" and self.data.method.partition in [dev.path, dev.name]:
                 active = idx

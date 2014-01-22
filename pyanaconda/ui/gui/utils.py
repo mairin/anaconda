@@ -27,7 +27,6 @@ from pyanaconda.constants import NOTICEABLE_FREEZE
 from contextlib import contextmanager
 from gi.repository import Gdk, Gtk, GLib, AnacondaWidgets
 import Queue
-import gettext
 import time
 import threading
 
@@ -77,6 +76,14 @@ def gtk_action_wait(func):
 
     return _call_method
 
+def fire_gtk_action(func, *args):
+    """Run some Gtk action in the main thread and wait for it."""
+
+    @gtk_action_wait
+    def gtk_action():
+        func(*args)
+
+    gtk_action()
 
 def gtk_action_nowait(func):
     """Decorator method which ensures every call of the decorated function to be
@@ -101,6 +108,29 @@ def gtk_action_nowait(func):
         GLib.idle_add(_idle_method, args)
 
     return _call_method
+
+class GtkActionList(object):
+    """Class for scheduling Gtk actions to be all run at once."""
+
+    def __init__(self):
+        self._actions = []
+
+    def add_action(self, func, *args):
+        """Add Gtk action to be run later."""
+
+        @gtk_action_wait
+        def gtk_action():
+            func(*args)
+
+        self._actions.append(gtk_action)
+
+    def fire(self):
+        """Run all scheduled Gtk actions."""
+
+        for action in self._actions:
+            action()
+
+        self._actions = []
 
 def gtk_batch_map(action, items, args=(), pre_func=None, batch_size=1):
     """
@@ -371,25 +401,6 @@ def set_treeview_selection(treeview, item, col=0):
 
     return itr
 
-def get_default_widget_direction():
-    """
-    Function to get default widget direction (RTL/LTR) for the current language
-    configuration.
-
-    XXX: this should be provided by the Gtk itself (#1008821)
-
-    :return: either Gtk.TextDirection.LTR or Gtk.TextDirection.RTL
-    :rtype: GtkTextDirection
-
-    """
-
-    # this is quite a hack, but it's exactly the same check Gtk uses internally
-    xlated = gettext.ldgettext("gtk30", "default:LTR")
-    if xlated == "default:LTR":
-        return Gtk.TextDirection.LTR
-    else:
-        return Gtk.TextDirection.RTL
-
 def setup_gtk_direction():
     """
     Set the right direction (RTL/LTR) of the Gtk widget's and their layout based
@@ -397,7 +408,7 @@ def setup_gtk_direction():
 
     """
 
-    Gtk.Widget.set_default_direction(get_default_widget_direction())
+    Gtk.Widget.set_default_direction(Gtk.get_locale_direction())
 
 def escape_markup(value):
     """
