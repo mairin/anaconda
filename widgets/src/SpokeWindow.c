@@ -60,10 +60,78 @@ G_DEFINE_TYPE(AnacondaSpokeWindow, anaconda_spoke_window, ANACONDA_TYPE_BASE_WIN
 static void anaconda_spoke_window_realize(GtkWidget *widget, gpointer user_data);
 static void anaconda_spoke_window_button_clicked(GtkButton *button,
                                                  AnacondaSpokeWindow *win);
+                                                 
+
+static int get_topbar_width(GtkWidget *window) {
+	GtkAllocation allocation;
+	/* change value below to make topbar bigger / smaller */
+	float topbar_width_percentage = .18;  
+	gtk_widget_get_allocation(window, &allocation);
+	return allocation.width * topbar_width_percentage;
+}
+
+static int get_topbar_height(GtkWidget *window) {
+	GtkAllocation allocation;
+	gtk_widget_get_allocation(window, &allocation);
+	return allocation.height;
+}
+
+/* function to override default drawing to insert topbar image */
+gboolean anaconda_spoke_window_on_draw(GtkWidget *win, cairo_t *cr) {
+	
+	/* Create topbar */
+	GTK_WIDGET_CLASS(anaconda_spoke_window_parent_class)->draw(win,cr);
+	cairo_rectangle(cr, 0, 0, get_topbar_width(win), get_topbar_height(win));
+	
+	/* Configure topbar base color */
+	/* Dark grey for RHEL:  65/255.0, 65/255.0, 62/255.0, 1 */
+	/* Blue for Fedora:     60/255.0, 110/255.0, 180/255.0, 1 */
+    cairo_set_source_rgba(cr, 65/255.0, 65/255.0, 62/255.0, 1); 
+    cairo_fill_preserve(cr); 
+    
+	/* Configure topbar texture image */
+	GdkPixbuf *pixbuf_background = gdk_pixbuf_new_from_file("/usr/share/anaconda/pixmaps/noise-texture.png", NULL); 
+	cairo_surface_t *surface= gdk_cairo_surface_create_from_pixbuf(pixbuf_background, 0, gtk_widget_get_window(GTK_WIDGET(win))); 
+	cairo_set_source_surface(cr, surface, 0, 0);
+	cairo_pattern_set_extend(cairo_get_source(cr), CAIRO_EXTEND_REPEAT);
+	cairo_fill(cr);
+ 	
+    /* Configure logo image overlaid on topbar */
+    GdkPixbuf *pixbuf_logo = gdk_pixbuf_new_from_file("/usr/share/anaconda/pixmaps/redhat-logo.png", NULL); 
+	if (pixbuf_logo != NULL) {
+		double x_value = (get_topbar_width(win) - gdk_pixbuf_get_width(pixbuf_logo))/2;
+		double y_value = 20;
+		cairo_surface_t *surface= gdk_cairo_surface_create_from_pixbuf(pixbuf_logo, 0, gtk_widget_get_window(GTK_WIDGET(win))); 
+		cairo_set_source_surface(cr, surface, x_value, y_value);
+		cairo_rectangle(cr, x_value, y_value, gdk_pixbuf_get_width(pixbuf_logo), gdk_pixbuf_get_height(pixbuf_logo));
+		cairo_fill(cr);
+	}
+    return TRUE; /* TRUE to avoid default draw handler */
+}
+
+/* Move base window content appropriate amount of space to the right to make room for topbar */
+static void anaconda_spoke_window_size_allocate (GtkWidget *window, GtkAllocation *allocation) {
+	GtkAllocation child_allocation;
+	GtkWidget *child;
+	
+	gtk_widget_set_allocation(window, allocation);
+	int topbar_width = get_topbar_width(window);
+	child_allocation.x = allocation->x+topbar_width;
+	child_allocation.y = allocation->y;
+	child_allocation.width = allocation->width-topbar_width;
+	child_allocation.height = allocation->height;
+	
+	child = gtk_bin_get_child (GTK_BIN (window));
+	if (child && gtk_widget_get_visible (child))
+    gtk_widget_size_allocate (child, &child_allocation);
+}
 
 static void anaconda_spoke_window_class_init(AnacondaSpokeWindowClass *klass) {
     GObjectClass *object_class = G_OBJECT_CLASS(klass);
-
+    GtkWidgetClass *widget_class = GTK_WIDGET_CLASS(klass);
+    
+    widget_class->draw=anaconda_spoke_window_on_draw;
+    widget_class->size_allocate=anaconda_spoke_window_size_allocate;
     klass->button_clicked = NULL;
 
     /**
