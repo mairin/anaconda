@@ -109,3 +109,26 @@
 .error {
     text-shadow: none;
 }
+
+/* vendor-specific colors/images */
+
+/* convert to hex becuase gtk cant make up its fucking mind which of 10 color schemes to use at any given moment */
+@define-color sidebar_redhat 65/255.0, 65/255.0, 62/255.0, 1;
+@define-color sidebar_fedora 60/255.0, 110/255.0, 180/255.0, 1;
+
+
+.logo-redhat { background-image: url('/usr/share/anaconda/pixmaps/redhat-logo.png'); }
+.logo-fedora { background-image: url('/usr/share/anaconda/pixmaps/fedora-logo.png'); }
+
+.sidebar-redhat { background-image: url('/usr/share/anaconda/pixmaps/redhat-bg.png'); }
+.sidebar-fedora { background-image: url('/usr/share/anaconda/pixmaps/noise-texture.png'); }
+
+
+/**
+
+HubWindow sidebar {
+	background-color: rgba(65, 65, 62, 1.0);
+	background-image: url('file://usr/share/ancaonda/pixmaps.noise-texture.png');
+}
+* 
+* **/

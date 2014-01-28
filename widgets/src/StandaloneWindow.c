@@ -89,7 +89,14 @@ gboolean anaconda_standalone_window_on_draw(GtkWidget *win, cairo_t *cr) {
 	
 	/* Create sidebar */
 	GTK_WIDGET_CLASS(anaconda_standalone_window_parent_class)->draw(win,cr);
-	cairo_rectangle(cr, 0, 0, get_sidebar_width(win), get_sidebar_height(win));
+	
+	/* if LTR, sidebar is left-aligned; if RTL, sidebar is right-aligned. */
+	if  (gtk_get_locale_direction() == GTK_TEXT_DIR_LTR) {
+		cairo_rectangle(cr, 0, 0, get_sidebar_width(win), get_sidebar_height(win));
+	}
+	else {
+		cairo_rectangle(cr, gtk_widget_get_allocated_width(win)-get_sidebar_width(win), 0, get_sidebar_width(win), get_sidebar_height(win));
+	}
 	
 	/* Configure sidebar base color */
 	/* Dark grey for RHEL:  65/255.0, 65/255.0, 62/255.0, 1 */

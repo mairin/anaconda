@@ -101,20 +101,34 @@ gboolean anaconda_hub_window_on_draw(GtkWidget *win, cairo_t *cr) {
 	
 	/* Create sidebar */
 	GTK_WIDGET_CLASS(anaconda_hub_window_parent_class)->draw(win,cr);
-	cairo_rectangle(cr, 0, 0, get_sidebar_width(win), get_sidebar_height(win));
+	
+    /* creating region for sidebar */
+    GtkStyleContext * context = gtk_widget_get_style_context(win);
+    gtk_style_context_add_class(context, "sidebar-redhat");
+    gtk_render_background(context, cr, 0, 0, get_sidebar_width(win), get_sidebar_height(win));
+    gtk_style_context_remove_class(context, "sidebar-redhat");
+	gtk_style_context_add_class(context, "logo-redhat");
+	    gtk_render_background(context, cr, 0, 0, get_sidebar_width(win), get_sidebar_height(win));
+
+
+	/* cairo_rectangle(cr, 0, 0, get_sidebar_width(win), get_sidebar_height(win)); */
 	
 	/* Configure sidebar base color */
-	/* Dark grey for RHEL:  65/255.0, 65/255.0, 62/255.0, 1 */
-	/* Blue for Fedora:     60/255.0, 110/255.0, 180/255.0, 1 */
+	/* .sidebar-redhat for RHEL; .sidebar-fedora for Fedora */
+	/* gtk_style_context_add_class(.sidebar_redhat, 
     cairo_set_source_rgba(cr, 65/255.0, 65/255.0, 62/255.0, 1); 
-    cairo_fill_preserve(cr); 
+    cairo_fill_preserve(cr);  */
     
 	/* Configure sidebar texture image */
+	/*
 	GdkPixbuf *pixbuf_background = gdk_pixbuf_new_from_file("/usr/share/anaconda/pixmaps/noise-texture.png", NULL); 
 	cairo_surface_t *surface= gdk_cairo_surface_create_from_pixbuf(pixbuf_background, 0, gtk_widget_get_window(GTK_WIDGET(win))); 
 	cairo_set_source_surface(cr, surface, 0, 0);
 	cairo_pattern_set_extend(cairo_get_source(cr), CAIRO_EXTEND_REPEAT);
-	cairo_fill(cr);
+	cairo_fill(cr);*/
+	
+	/* gtk_render_background() might be the way to go to get the CSS here */
+	/* gtk_style_context_add_region() to define region ??!!? */ 
  	
     /* Configure logo image overlaid on sidebar */
     GdkPixbuf *pixbuf_logo = gdk_pixbuf_new_from_file("/usr/share/anaconda/pixmaps/redhat-logo.png", NULL); 
