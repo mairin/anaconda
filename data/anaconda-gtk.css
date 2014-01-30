@@ -112,7 +112,7 @@
 
 /* vendor-specific colors/images */
 
-/* convert to hex becuase gtk cant make up its fucking mind which of 10 color schemes to use at any given moment */
+/* reminder: convert to hex */
 @define-color sidebar_redhat 65/255.0, 65/255.0, 62/255.0, 1;
 @define-color sidebar_fedora 60/255.0, 110/255.0, 180/255.0, 1;
 
