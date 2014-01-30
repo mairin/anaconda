@@ -99,7 +99,7 @@ static int get_sidebar_height(GtkWidget *window) {
 /* function to override default drawing to insert sidebar image */
 gboolean anaconda_hub_window_on_draw(GtkWidget *win, cairo_t *cr) {
 	
-	/* Create sidebar */
+	/* calls parent class' draw handler */
 	GTK_WIDGET_CLASS(anaconda_hub_window_parent_class)->draw(win,cr);
 	
     /* creating region for sidebar */
@@ -108,8 +108,11 @@ gboolean anaconda_hub_window_on_draw(GtkWidget *win, cairo_t *cr) {
     gtk_render_background(context, cr, 0, 0, get_sidebar_width(win), get_sidebar_height(win));
     gtk_style_context_remove_class(context, "sidebar-redhat");
 	gtk_style_context_add_class(context, "logo-redhat");
-	    gtk_render_background(context, cr, 0, 0, get_sidebar_width(win), get_sidebar_height(win));
-
+/*
+	* TODO write function to capture logo width / height ?? 
+	gtk_render_background(context, cr, 0, 0, $LOGO_WIDTH??, $LOGO_HEIGHT??);
+    gtk_style_context_remove_class(context, "logo-redhat");
+*/
 
 	/* cairo_rectangle(cr, 0, 0, get_sidebar_width(win), get_sidebar_height(win)); */
 	
